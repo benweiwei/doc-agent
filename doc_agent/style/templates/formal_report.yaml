@@ -1,0 +1,16 @@
+name: "正式报告"
+description: "适用于商务报告、项目汇报等正式场景"
+tone: "正式、专业、客观"
+vocabulary_level: "高级"
+formatting_rules:
+  - "使用编号列表说明流程步骤"
+  - "段落开头不要使用口语化表达"
+  - "数据结论使用精确数字"
+  - "包含执行摘要（Executive Summary）"
+  - "使用三级标题层次结构"
+forbidden_patterns:
+  - "emoji"
+  - "口语缩写（比如、啥、咋）"
+  - "感叹号过多"
+  - "非正式缩写"
+  - "第一人称叙述（除执行摘要外）"

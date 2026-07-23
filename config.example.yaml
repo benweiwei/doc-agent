@@ -1,0 +1,27 @@
+# doc-agent configuration
+server:
+  host: "127.0.0.1"
+  port: 3966
+  reload: true
+
+model:
+  # Provider: anthropic, openai, ollama
+  provider: "anthropic"
+  name: "claude-sonnet-4-20250514"
+  temperature: 0.3
+  max_tokens: 4096
+
+style:
+  # Writing style preferences
+  tone: "professional"
+  language: "zh-CN"
+  # Custom templates directory (optional)
+  templates_dir: null
+
+workspace:
+  # Root directory for documentation projects
+  root: "."
+  # Auto-detect git repository
+  auto_detect_git: true
+  # Branch naming pattern for doc branches
+  branch_prefix: "docs/"
