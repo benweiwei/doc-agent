@@ -4,6 +4,10 @@ export default {
     settings: 'Settings',
     language: 'Language',
   },
+  common: {
+    on: 'On',
+    off: 'Off',
+  },
   branch: {
     title: 'Branches',
     create: 'New Branch',
@@ -31,6 +35,8 @@ export default {
     export: 'Export',
     exportMd: 'Export as Markdown (.md)',
     exportTxt: 'Export as Text (.txt)',
+    exportHtml: 'Export as HTML (.html)',
+    autoSave: 'Auto-save',
   },
   editor: {
     placeholder: 'Start editing...',
@@ -49,6 +55,11 @@ export default {
     aiWriting: 'AI is writing...',
     visual: 'Visual',
     source: 'Source',
+    insertImage: 'Insert image',
+    codeToDiagram: 'Code to diagram (Mermaid)',
+    imageUploadFailed: 'Image upload failed',
+    diagramNoSelection: 'Select the code to convert into a diagram first',
+    diagramFailed: 'Failed to generate diagram',
   },
   history: {
     title: 'History',

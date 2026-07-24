@@ -1,6 +1,7 @@
 import { useEditor, EditorContent, Editor as TiptapEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
 import { Markdown } from 'tiptap-markdown';
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useI18n } from "../context/I18nContext";
@@ -17,6 +18,10 @@ interface EditorProps {
   onAcceptEdit?: () => void;
   onRejectEdit?: () => void;
   onSelectionChange?: (selectedText: string) => void;
+  /** Upload an image file, returning its URL to embed in the document. */
+  onImageUpload?: (file: File) => Promise<string>;
+  /** Convert the given code into a Mermaid diagram definition. */
+  onGenerateDiagram?: (code: string) => Promise<string>;
 }
 
 // --- Style constants ---
@@ -302,14 +307,25 @@ function injectTipTapStyles() {
       border-top: 1px solid #313244;
       margin: 1.5em 0;
     }
+    .tiptap-editor .ProseMirror img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 6px;
+      margin: 8px 0;
+    }
+    .tiptap-editor .ProseMirror img.ProseMirror-selectednode {
+      outline: 2px solid #89b4fa;
+    }
   `;
   document.head.appendChild(style);
 }
 
 // --- Toolbar Component ---
 
-function Toolbar({ editor, editorMode, onModeChange }: { editor: TiptapEditor | null; editorMode: 'visual' | 'source'; onModeChange: (mode: 'visual' | 'source') => void }) {
+function Toolbar({ editor, editorMode, onModeChange, onImageUpload, onGenerateDiagram }: { editor: TiptapEditor | null; editorMode: 'visual' | 'source'; onModeChange: (mode: 'visual' | 'source') => void; onImageUpload?: (file: File) => Promise<string>; onGenerateDiagram?: (code: string) => Promise<string> }) {
   const [, setForceUpdate] = useState(0);
+  const [busy, setBusy] = useState<null | 'image' | 'diagram'>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
   // Re-render toolbar when selection/content changes
@@ -323,6 +339,48 @@ function Toolbar({ editor, editorMode, onModeChange }: { editor: TiptapEditor | 
       editor.off("transaction", update);
     };
   }, [editor]);
+
+  const handleImagePick = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file || !editor || !onImageUpload) return;
+    setBusy('image');
+    try {
+      const url = await onImageUpload(file);
+      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      alert(t('editor.imageUploadFailed'));
+    } finally {
+      setBusy(null);
+    }
+  }, [editor, onImageUpload, t]);
+
+  const handleGenerateDiagram = useCallback(async () => {
+    if (!editor || !onGenerateDiagram) return;
+    const { from, to } = editor.state.selection;
+    const code = editor.state.doc.textBetween(from, to, "\n").trim();
+    if (!code) {
+      alert(t('editor.diagramNoSelection'));
+      return;
+    }
+    setBusy('diagram');
+    try {
+      const mermaid = await onGenerateDiagram(code);
+      if (mermaid) {
+        editor.chain().focus().insertContent({
+          type: 'codeBlock',
+          attrs: { language: 'mermaid' },
+          content: [{ type: 'text', text: mermaid }],
+        }).run();
+      }
+    } catch (err) {
+      console.error("Diagram generation failed:", err);
+      alert(t('editor.diagramFailed'));
+    } finally {
+      setBusy(null);
+    }
+  }, [editor, onGenerateDiagram, t]);
 
   if (!editor) return null;
 
@@ -459,6 +517,49 @@ function Toolbar({ editor, editorMode, onModeChange }: { editor: TiptapEditor | 
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="2" y1="12" x2="22" y2="12"/></svg>
       </button>
 
+      {(onImageUpload || onGenerateDiagram) && <div style={toolbarStyles.separator} />}
+
+      {/* Image import */}
+      {onImageUpload && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={handleImagePick}
+          />
+          <button
+            style={btnStyle(false)}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={busy !== null}
+            title={t('editor.insertImage')}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#313244"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+          >
+            {busy === 'image'
+              ? <span style={{ fontSize: "11px" }}>…</span>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>}
+          </button>
+        </>
+      )}
+
+      {/* Code -> architecture diagram */}
+      {onGenerateDiagram && (
+        <button
+          style={btnStyle(false)}
+          onClick={handleGenerateDiagram}
+          disabled={busy !== null}
+          title={t('editor.codeToDiagram')}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#313244"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+        >
+          {busy === 'diagram'
+            ? <span style={{ fontSize: "11px" }}>…</span>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M6.5 10v2.5a1 1 0 0 0 1 1H14"/></svg>}
+        </button>
+      )}
+
       {/* Spacer to push mode toggle to the right */}
       <div style={{ flex: 1 }} />
 
@@ -495,6 +596,8 @@ export function Editor({
   onAcceptEdit,
   onRejectEdit,
   onSelectionChange,
+  onImageUpload,
+  onGenerateDiagram,
 }: EditorProps) {
   // Inject global styles on mount
   useEffect(() => {
@@ -518,6 +621,10 @@ export function Editor({
         html: false,
         transformCopiedText: true,
         transformPastedText: true,
+      }),
+      Image.configure({
+        inline: false,
+        allowBase64: true,
       }),
     ],
     content,
@@ -688,7 +795,7 @@ export function Editor({
 
   return (
     <div style={editorStyles.wrapper} className="tiptap-editor">
-      {editable && <Toolbar editor={editor} editorMode={editorMode} onModeChange={handleModeChange} />}
+      {editable && <Toolbar editor={editor} editorMode={editorMode} onModeChange={handleModeChange} onImageUpload={onImageUpload} onGenerateDiagram={onGenerateDiagram} />}
       {editorMode === 'visual' ? (
         <div style={editorStyles.editorWithGutter}>
           {/* Gutter for paragraph selection */}

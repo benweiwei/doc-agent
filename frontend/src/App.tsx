@@ -173,6 +173,11 @@ function App() {
   const [rightTab, setRightTab] = useState<"history" | "interactions">("interactions");
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const saveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(() => {
+    const v = localStorage.getItem("doc-agent:autoSave");
+    return v === null ? true : v === "true";
+  });
   const [historyDiff, setHistoryDiff] = useState<{
     oldContent: string;
     newContent: string;
@@ -459,6 +464,31 @@ function App() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
+  // --- Auto-save (debounced) ---
+
+  const toggleAutoSave = useCallback(() => {
+    setAutoSaveEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("doc-agent:autoSave", String(next));
+      return next;
+    });
+  }, []);
+
+  // Debounce: save ~2s after the user stops typing, when there are unsaved
+  // changes and no AI diff is being reviewed.
+  useEffect(() => {
+    if (!autoSaveEnabled || diffMode) return;
+    const doc = state.currentDocument;
+    if (!doc || !state.unsavedChanges.has(doc.id)) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      handleSave();
+    }, 2000);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [state.currentDocument?.content, state.currentDocument?.id, state.unsavedChanges, autoSaveEnabled, diffMode, handleSave]);
+
   // --- Interaction record helper ---
 
   const currentInteractionId = useRef<string | null>(null);
@@ -617,20 +647,44 @@ function App() {
 
   // --- Export handler ---
 
-  const handleExport = useCallback((format: 'md' | 'txt') => {
-    const content = state.currentDocument?.content || '';
-    const title = state.currentDocument?.title || 'document';
+  const handleExport = useCallback(async (format: 'md' | 'txt' | 'html') => {
+    if (!state.currentDocument) return;
+    const title = state.currentDocument.title || 'document';
     const safeName = title.replace(/\.[^.]+$/, ''); // strip existing extension
-    const ext = format === 'md' ? '.md' : '.txt';
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    setExportMenuOpen(false);
+    let blob: Blob;
+    let ext: string;
+    if (format === 'html') {
+      try {
+        blob = await api.exportDocument(state.currentDocument.id, 'html', state.currentBranch);
+      } catch (err) {
+        console.error('Failed to export HTML:', err);
+        return;
+      }
+      ext = '.html';
+    } else {
+      const content = state.currentDocument.content || '';
+      blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      ext = format === 'md' ? '.md' : '.txt';
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${safeName}${ext}`;
     a.click();
     URL.revokeObjectURL(url);
-    setExportMenuOpen(false);
-  }, [state.currentDocument]);
+  }, [state.currentDocument, state.currentBranch]);
+
+  // --- Editor asset / diagram handlers ---
+
+  const handleImageUpload = useCallback(async (file: File): Promise<string> => {
+    const { url } = await api.uploadAsset(file);
+    return url;
+  }, []);
+
+  const handleGenerateDiagram = useCallback((code: string): Promise<string> => {
+    return api.generateDiagram(code);
+  }, []);
 
   return (
     <div style={styles.app}>
@@ -734,6 +788,23 @@ function App() {
                 </span>
               )}
               <button
+                onClick={toggleAutoSave}
+                title={t("document.autoSave")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  color: autoSaveEnabled ? colors.accent : "#6c7086",
+                }}
+              >
+                {t("document.autoSave")}: {autoSaveEnabled ? t("common.on") : t("common.off")}
+              </button>
+              <button
                 style={{
                   ...styles.iconBtn,
                   opacity: state.currentDocument && state.unsavedChanges.has(state.currentDocument.id) ? 1 : 0.4,
@@ -806,6 +877,24 @@ function App() {
                     >
                       {t("document.exportTxt")}
                     </button>
+                    <button
+                      onClick={() => handleExport('html')}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "6px 12px",
+                        fontSize: "12px",
+                        color: colors.text,
+                        backgroundColor: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = colors.border)}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    >
+                      {t("document.exportHtml")}
+                    </button>
                   </div>
                 )}
               </div>
@@ -833,6 +922,8 @@ function App() {
                   onAcceptEdit={handleAcceptEdit}
                   onRejectEdit={handleRejectEdit}
                   onSelectionChange={handleSelectionChange}
+                  onImageUpload={handleImageUpload}
+                  onGenerateDiagram={handleGenerateDiagram}
                 />
                 {isStreaming && (
                   <div style={{

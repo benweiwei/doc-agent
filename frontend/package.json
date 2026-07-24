@@ -10,6 +10,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-placeholder": "^2.6.0",
     "@tiptap/pm": "^2.6.0",
     "@tiptap/react": "^2.6.0",

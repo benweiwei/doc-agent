@@ -4,6 +4,10 @@ export default {
     settings: '设置',
     language: '语言',
   },
+  common: {
+    on: '开',
+    off: '关',
+  },
   branch: {
     title: '分支',
     create: '新建分支',
@@ -31,6 +35,8 @@ export default {
     export: '导出',
     exportMd: '导出 Markdown (.md)',
     exportTxt: '导出纯文本 (.txt)',
+    exportHtml: '导出 HTML (.html)',
+    autoSave: '自动保存',
   },
   editor: {
     placeholder: '开始编辑文档...',
@@ -49,6 +55,11 @@ export default {
     aiWriting: 'AI 正在输出...',
     visual: '可视化',
     source: '源码',
+    insertImage: '插入图片',
+    codeToDiagram: '代码转架构图（Mermaid）',
+    imageUploadFailed: '图片上传失败',
+    diagramNoSelection: '请先选中要转换为架构图的代码',
+    diagramFailed: '架构图生成失败',
   },
   history: {
     title: '历史记录',

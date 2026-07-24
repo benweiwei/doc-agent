@@ -111,6 +111,42 @@ export const api = {
     });
   },
 
+  // --- Assets (image upload) ---
+
+  async uploadAsset(file: File): Promise<{ url: string; filename: string }> {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`${API_BASE}/assets`, { method: "POST", body: form });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Upload failed ${response.status}: ${body}`);
+    }
+    return response.json();
+  },
+
+  // --- Diagram (code -> mermaid) ---
+
+  async generateDiagram(code: string, language?: string): Promise<string> {
+    const data = await request<{ mermaid: string }>("/diagram/from-code", {
+      method: "POST",
+      body: JSON.stringify({ code, language }),
+    });
+    return data.mermaid || "";
+  },
+
+  // --- Export ---
+
+  async exportDocument(docId: string, format: "html", branch?: string): Promise<Blob> {
+    const params = new URLSearchParams({ format });
+    if (branch) params.set("branch", branch);
+    const response = await fetch(`${API_BASE}/export/${docId}?${params.toString()}`);
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Export failed ${response.status}: ${body}`);
+    }
+    return response.blob();
+  },
+
   // --- Save/Commit ---
 
   async saveDocument(documentId: string, content: string, branch?: string, message?: string): Promise<{ commit_hash: string }> {

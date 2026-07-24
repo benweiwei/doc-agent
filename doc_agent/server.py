@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import html as html_lib
 import json
 import logging
+import re
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -52,6 +63,14 @@ def _get_vcs() -> VersionControl:
 def _get_editor() -> DocumentEditor:
     assert _editor is not None, "App not initialized"
     return _editor
+
+
+def _get_assets_dir() -> Path:
+    """Directory holding uploaded images/assets (outside the git workspace)."""
+    workspace = Path(_get_config().workspace.path).expanduser()
+    assets = workspace.parent / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    return assets
 
 
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
@@ -155,6 +174,12 @@ class RenameBranchRequest(BaseModel):
 
 class SwitchBranchRequest(BaseModel):
     name: str
+
+
+class DiagramRequest(BaseModel):
+    code: str
+    language: Optional[str] = None
+    instruction: Optional[str] = None
 
 
 # ─── Health ───────────────────────────────────────────────────────────────────
@@ -296,6 +321,141 @@ async def run_agent(req: EditRequest):
     if edit_response is None:
         raise HTTPException(status_code=502, detail=error or "Agent produced no result")
     return {"edit_response": edit_response, "error": error}
+
+
+# ─── Assets (image upload) ────────────────────────────────────────────────────
+
+_ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@app.post("/api/assets")
+async def upload_asset(file: UploadFile = File(...)):
+    """Upload an image; store it under the assets dir and return its URL."""
+    original = file.filename or "image"
+    ext = Path(original).suffix.lower()
+    if ext not in _ALLOWED_IMAGE_EXT:
+        raise HTTPException(status_code=400, detail=f"Unsupported image type: {ext}")
+    data = await file.read()
+    if len(data) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 10 MB)")
+    name = f"{uuid.uuid4().hex}{ext}"
+    (_get_assets_dir() / name).write_bytes(data)
+    return {"url": f"/api/assets/{name}", "filename": name}
+
+
+@app.get("/api/assets/{name}")
+async def get_asset(name: str):
+    """Serve a previously uploaded asset."""
+    # Prevent path traversal — only a bare filename is allowed.
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="Invalid asset name")
+    path = _get_assets_dir() / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(path)
+
+
+# ─── Export ───────────────────────────────────────────────────────────────────
+
+
+def _render_markdown_html(doc_id: str, md_text: str, base_url: str) -> str:
+    """Render markdown to a standalone HTML document.
+
+    - Fenced ```mermaid blocks are turned into <pre class="mermaid"> and rendered
+      client-side via the mermaid CDN.
+    - Relative /api/assets URLs are rewritten to absolute so images load while
+      the server is running.
+    """
+    import markdown
+
+    body = markdown.markdown(
+        md_text or "",
+        extensions=["fenced_code", "tables", "toc", "sane_lists"],
+    )
+    # Rewrite relative asset URLs to absolute.
+    body = body.replace('src="/api/assets/', f'src="{base_url.rstrip("/")}/api/assets/')
+    # Convert highlighted mermaid code blocks into mermaid containers.
+    body = re.sub(
+        r'<pre><code class="language-mermaid">(.*?)</code></pre>',
+        lambda m: f'<pre class="mermaid">{html_lib.unescape(m.group(1))}</pre>',
+        body,
+        flags=re.DOTALL,
+    )
+    title = html_lib.escape(Path(doc_id).stem or doc_id)
+    return f"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+  body {{ max-width: 820px; margin: 40px auto; padding: 0 20px;
+         font-family: -apple-system, system-ui, "Segoe UI", sans-serif;
+         line-height: 1.7; color: #24292f; }}
+  h1, h2, h3 {{ line-height: 1.3; }}
+  pre {{ background: #f6f8fa; padding: 12px 16px; border-radius: 6px; overflow-x: auto; }}
+  code {{ background: #f6f8fa; padding: .2em .4em; border-radius: 3px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }}
+  pre code {{ background: none; padding: 0; }}
+  pre.mermaid {{ background: none; text-align: center; }}
+  blockquote {{ border-left: 3px solid #d0d7de; padding-left: 12px; color: #57606a; margin-left: 0; }}
+  table {{ border-collapse: collapse; }}
+  th, td {{ border: 1px solid #d0d7de; padding: 6px 12px; }}
+  img {{ max-width: 100%; height: auto; }}
+</style>
+</head>
+<body>
+{body}
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({{ startOnLoad: true }});
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/api/export/{doc_id:path}")
+async def export_document(doc_id: str, request: Request, branch: Optional[str] = None, format: str = "html"):
+    """Export a document. Currently supports format=html (self-contained)."""
+    vcs = _get_vcs()
+    content, _resolved = vcs.load_document(doc_id, branch)
+    if format != "html":
+        raise HTTPException(status_code=400, detail=f"Unsupported export format: {format}")
+    rendered = _render_markdown_html(doc_id, content, str(request.base_url))
+    filename = f"{Path(doc_id).stem or 'document'}.html"
+    return HTMLResponse(
+        content=rendered,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─── Diagram (code → mermaid) ──────────────────────────────────────────────────
+
+
+@app.post("/api/diagram/from-code")
+async def diagram_from_code(req: DiagramRequest):
+    """Convert a code snippet into a Mermaid diagram definition via the LLM."""
+    if not (req.code or "").strip():
+        raise HTTPException(status_code=400, detail="code is required")
+    lang = req.language or ""
+    extra = f"\n额外要求：{req.instruction}" if req.instruction else ""
+    system = (
+        "你是软件架构分析专家。阅读用户提供的代码，提炼其模块、调用关系与数据流，"
+        "输出一张 Mermaid 图来描述其架构。"
+        "只输出 Mermaid 源码本身，不要任何解释文字，不要用 ``` 代码围栏包裹。"
+        "优先使用 flowchart 或 graph 语法，节点标签用中文。"
+    )
+    prompt = f"代码语言：{lang or '未知'}\n\n代码：\n{req.code}{extra}"
+    editor = _get_editor()
+    raw = await editor.llm.generate(prompt, system=system, temperature=0.2)
+    mermaid = raw.strip()
+    # Strip accidental code fences if the model added them anyway.
+    if mermaid.startswith("```"):
+        mermaid = re.sub(r"^```[a-zA-Z]*\n?", "", mermaid)
+        mermaid = re.sub(r"\n?```$", "", mermaid).strip()
+    return {"mermaid": mermaid}
 
 
 # ─── Branch Management ────────────────────────────────────────────────────────
