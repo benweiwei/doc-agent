@@ -102,3 +102,23 @@
 | `read_document` / `list_documents` / `search_documents` | 读取、列出、检索工作区文档 |
 | `apply_edit` | 写入完整新内容到内存工作副本（不立即提交） |
 | `web_search` | 联网搜索，后端可选 duckduckgo / tavily / brave / bocha |
+
+## 数据存储与持久化
+
+均为本地文件存储，无数据库。以下路径以默认工作区 `~/.doc-agent` 为例。
+
+| 数据 | 位置 | 说明 |
+|------|------|------|
+| 历史文档 / 版本 | `~/.doc-agent/workspace`（Git 仓库） | 文档为 `.md` 文件，每次保存/Accept 产生一次 commit，多分支隔离；历史面板读取 git log |
+| AI 交互记录 | `~/.doc-agent/workspace/.doc-agent/interactions.json` | 经 `/api/interactions` 增改查，仅保留最近 200 条；同时作为 AI 编辑时注入的“文档+分支”历史上下文（取最近 5 条 completed） |
+| 个人习惯画像 | `~/.doc-agent/habit_profile.json` | 由 `HabitAnalyzer` 从历史文档统计（句长/段长、高频词、标点、句首/段首、连接词等）；`/api/styles/learn` 触发，支持增量更新（旧0.7/新0.3 加权） |
+| 风格模板（含导入） | 用户：`~/.doc-agent/styles/*.yaml`；内置：`doc_agent/style/templates/*.yaml` | YAML 格式；内置 3 个（casual_blog / formal_report / technical_doc，只读），用户创建/导入的存用户目录，同名时用户优先 |
+| 上传图片资源 | `~/.doc-agent/assets/` | 位于 Git 工作区之外，不进文档 git 历史；经 `/api/assets` 上传/服务 |
+
+> 习惯画像、风格模板、图片资源均在工作区之外的 `~/.doc-agent/` 下，不会被纳入文档的 Git 版本历史；而交互记录位于工作区内的 `.doc-agent/`。
+
+## 编辑模式：Agent vs 单发
+
+- **单发编辑**（消息 `type=edit`，`DocumentEditor.edit_document_stream`）：一次 prompt → 流式生成，适合直接改写。
+- **Agent 模式**（消息 `type=agent`，`AgentSession.run`，前端默认开启）：多步工具调用循环（最多 `max_steps` 步），可读取其他文档、联网检索后再动笔；模型不支持 function calling 时自动回退到单发路径。
+- 两者共享同一 system prompt 组装（风格模板 + 习惯画像 + 该文档历史上下文），且均不自动提交，由用户 Accept 后走 `/api/edit/commit` 落盘。

@@ -206,7 +206,7 @@ export function InstructionBar({
   const [progressMsg, setProgressMsg] = useState("");
   const [editDone, setEditDone] = useState(false);
   const [error, setError] = useState("");
-  const [agentMode, setAgentMode] = useState(false);
+  const [agentMode, setAgentMode] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // A single stable WebSocket connection handles both modes; the server
