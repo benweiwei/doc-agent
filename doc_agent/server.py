@@ -828,6 +828,32 @@ async def learn_style_from_docs():
         return {"status": "no_documents"}
     profile = _habit_tracker.learn_from_documents(doc_files)
     _habit_tracker.save_profile(profile)
+    return {
+        "status": "ok",
+        "doc_count": len(doc_files),
+        "summary": _habit_tracker.format_for_prompt(profile),
+    }
+
+
+@app.get("/api/styles/habit")
+async def get_habit_profile():
+    """Return the current learned habit profile (if any) with a readable summary."""
+    profile = _habit_tracker.load_profile()
+    if not profile:
+        return {"exists": False, "summary": "", "profile": {}}
+    return {
+        "exists": True,
+        "summary": _habit_tracker.format_for_prompt(profile),
+        "profile": profile,
+    }
+
+
+@app.delete("/api/styles/habit")
+async def clear_habit_profile():
+    """Delete the learned habit profile file."""
+    path = _habit_tracker.profile_path
+    if path.exists():
+        path.unlink()
     return {"status": "ok"}
 
 

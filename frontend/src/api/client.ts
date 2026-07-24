@@ -274,8 +274,16 @@ export const api = {
 
   // --- Style ---
 
-  learnStyle(): Promise<void> {
-    return request<void>('/styles/learn', { method: 'POST' });
+  learnStyle(): Promise<{ status: string; doc_count?: number; summary?: string }> {
+    return request<{ status: string; doc_count?: number; summary?: string }>('/styles/learn', { method: 'POST' });
+  },
+
+  getHabitProfile(): Promise<{ exists: boolean; summary: string; profile: Record<string, unknown> }> {
+    return request<{ exists: boolean; summary: string; profile: Record<string, unknown> }>('/styles/habit');
+  },
+
+  clearHabitProfile(): Promise<{ status: string }> {
+    return request<{ status: string }>('/styles/habit', { method: 'DELETE' });
   },
 
   async listStyleTemplates(): Promise<StyleTemplateDTO[]> {

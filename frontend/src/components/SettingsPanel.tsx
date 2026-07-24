@@ -200,6 +200,21 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+  const [habit, setHabit] = useState<{ exists: boolean; summary: string }>({ exists: false, summary: "" });
+  const [habitLoading, setHabitLoading] = useState(false);
+  const [habitBusy, setHabitBusy] = useState<null | "learn" | "clear">(null);
+
+  const loadHabit = useCallback(async () => {
+    setHabitLoading(true);
+    try {
+      const data = await api.getHabitProfile();
+      setHabit({ exists: data.exists, summary: data.summary || "" });
+    } catch (err) {
+      console.error("Failed to load habit profile:", err);
+    } finally {
+      setHabitLoading(false);
+    }
+  }, []);
 
   // Load config when opened
   useEffect(() => {
@@ -216,6 +231,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         setStatusMsg(t('settings.loadFailed'));
       })
       .finally(() => setLoading(false));
+    loadHabit();
   }, [isOpen]);
 
   const handleSave = useCallback(async () => {
@@ -234,13 +250,34 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   }, [config, onClose]);
 
   const handleLearnStyle = useCallback(async () => {
+    setHabitBusy("learn");
     setStatusMsg(t('style.learning'));
     try {
-      await api.learnStyle();
-      setStatusMsg(t('style.learnSuccess'));
+      const res = await api.learnStyle();
+      if (res.status === "no_documents") {
+        setStatusMsg(t('style.learnNoDocs'));
+      } else {
+        setStatusMsg(t('style.learnSuccess'));
+        setHabit({ exists: true, summary: res.summary || "" });
+      }
     } catch (err) {
       console.error("Failed to learn style:", err);
       setStatusMsg(t('style.learnFailed'));
+    } finally {
+      setHabitBusy(null);
+    }
+  }, [t]);
+
+  const handleClearHabit = useCallback(async () => {
+    setHabitBusy("clear");
+    try {
+      await api.clearHabitProfile();
+      setHabit({ exists: false, summary: "" });
+      setStatusMsg(t('style.cleared'));
+    } catch (err) {
+      console.error("Failed to clear habit profile:", err);
+    } finally {
+      setHabitBusy(null);
     }
   }, [t]);
 
@@ -356,19 +393,83 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                     />
                   </button>
                 </div>
+                <div style={{ fontSize: "11px", color: colors.textMuted, marginTop: "-4px", marginBottom: "10px" }}>
+                  {t('settings.styleEnabledHint')}
+                </div>
 
-                {config.style_enabled && (
-                  <button
-                    style={{
-                      ...settingsStyles.cancelBtn,
-                      marginTop: "8px",
-                      fontSize: "12px",
-                    }}
-                    onClick={handleLearnStyle}
-                  >
-                    {t('settings.learnStyle')}
-                  </button>
-                )}
+                {/* Personal writing-habit profile card */}
+                <div
+                  style={{
+                    backgroundColor: colors.surface,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: "8px",
+                    padding: "12px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: colors.text }}>
+                      {t('settings.habitProfile')}
+                    </span>
+                    <span style={{ fontSize: "11px", color: habit.exists ? "#a6e3a1" : colors.textMuted }}>
+                      {habitLoading ? t('settings.loading') : habit.exists ? t('settings.habitLearned') : t('settings.habitNone')}
+                    </span>
+                  </div>
+
+                  {habit.exists && habit.summary && (
+                    <pre
+                      style={{
+                        fontSize: "11px",
+                        color: colors.textMuted,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        margin: "0 0 10px",
+                        fontFamily: "ui-monospace, Menlo, monospace",
+                        maxHeight: "140px",
+                        overflow: "auto",
+                      }}
+                    >
+                      {habit.summary}
+                    </pre>
+                  )}
+                  {!habit.exists && !habitLoading && (
+                    <div style={{ fontSize: "11px", color: colors.textMuted, marginBottom: "10px" }}>
+                      {t('settings.habitHint')}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      style={{
+                        ...settingsStyles.saveBtn,
+                        fontSize: "12px",
+                        padding: "6px 12px",
+                        ...(habitBusy ? { opacity: 0.6, cursor: "not-allowed" } : {}),
+                      }}
+                      onClick={handleLearnStyle}
+                      disabled={habitBusy !== null}
+                    >
+                      <BookOpen size={13} />
+                      {habitBusy === "learn"
+                        ? t('style.learning')
+                        : habit.exists ? t('settings.relearnStyle') : t('settings.learnStyle')}
+                    </button>
+                    {habit.exists && (
+                      <button
+                        style={{
+                          ...settingsStyles.cancelBtn,
+                          fontSize: "12px",
+                          padding: "6px 12px",
+                          ...(habitBusy ? { opacity: 0.6, cursor: "not-allowed" } : {}),
+                        }}
+                        onClick={handleClearHabit}
+                        disabled={habitBusy !== null}
+                      >
+                        <Trash2 size={13} />
+                        {t('settings.clearHabit')}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Style Templates */}
