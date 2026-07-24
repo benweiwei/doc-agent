@@ -42,3 +42,11 @@ Thumbs.db
 config.yaml
 *.log
 .doc-agent/
+.workspace/
+
+# Qoder
+.qoder/
+
+# Temp files
+/tmp/
+nohup.out
