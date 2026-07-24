@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, ReactNode, Dispatch } from "react";
-import type { Document, BranchInfo, EditResponse, InteractionRecord, UnifiedDocument, StyleTemplateDTO } from "../types";
+import type { Document, BranchInfo, EditResponse, InteractionRecord, UnifiedDocument, StyleTemplateDTO, AgentTimelineEvent } from "../types";
 
 // --- State ---
 
@@ -22,6 +22,7 @@ export interface AppState {
   interactionHistory: InteractionRecord[];
   styleTemplates: StyleTemplateDTO[];
   selectedStyle: string | null;
+  agentTimeline: AgentTimelineEvent[];
 }
 
 const initialState: AppState = {
@@ -43,6 +44,7 @@ const initialState: AppState = {
   interactionHistory: [],
   styleTemplates: [],
   selectedStyle: null,
+  agentTimeline: [],
 };
 
 // --- Actions ---
@@ -70,7 +72,9 @@ export type AppAction =
   | { type: "SET_INTERACTION_HISTORY"; history: InteractionRecord[] }
   | { type: "UPDATE_INTERACTION"; payload: { id: string } & Partial<InteractionRecord> }
   | { type: "SET_STYLE_TEMPLATES"; templates: StyleTemplateDTO[] }
-  | { type: "SET_SELECTED_STYLE"; name: string | null };
+  | { type: "SET_SELECTED_STYLE"; name: string | null }
+  | { type: "PUSH_AGENT_EVENT"; payload: AgentTimelineEvent }
+  | { type: "CLEAR_AGENT_TIMELINE" };
 
 // --- Reducer ---
 
@@ -154,6 +158,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, styleTemplates: action.templates };
     case "SET_SELECTED_STYLE":
       return { ...state, selectedStyle: action.name };
+    case "PUSH_AGENT_EVENT":
+      return { ...state, agentTimeline: [...state.agentTimeline, action.payload] };
+    case "CLEAR_AGENT_TIMELINE":
+      return { ...state, agentTimeline: [] };
     default:
       return state;
   }

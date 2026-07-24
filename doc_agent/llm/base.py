@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator
+from dataclasses import dataclass, field
+from typing import Any, AsyncGenerator, Optional
 
 
 # ─── Error Types ───────────────────────────────────────────────────────────────
@@ -37,6 +38,59 @@ class LLMUnavailableError(LLMError):
     """Raised when the LLM service is unavailable (5xx, connection refused, etc.)."""
 
     pass
+
+
+# ─── Tool-calling Data Structures ──────────────────────────────────────────────
+
+
+@dataclass
+class ToolSpec:
+    """与 Provider 无关的工具声明。
+
+    Attributes:
+        name: 工具名称。
+        description: 工具用途描述（供模型理解何时调用）。
+        parameters: JSON Schema 描述的参数结构。
+    """
+
+    name: str
+    description: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ToolCall:
+    """模型发起的一次工具调用。"""
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ChatMessage:
+    """对话消息（与 Provider 无关的规范化表示）。
+
+    role:
+        - "user" / "assistant": 普通对话消息，内容在 content。
+        - "tool": 工具执行结果，content 为结果文本，tool_call_id 关联对应调用。
+    assistant 触发工具调用时，tool_calls 记录调用列表。
+    """
+
+    role: str
+    content: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: Optional[str] = None
+
+
+@dataclass
+class ChatResult:
+    """一次 chat 调用的规范化返回。"""
+
+    text: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    stop_reason: Optional[str] = None
+    usage: dict[str, Any] = field(default_factory=dict)
 
 
 # ─── Abstract Base Class ───────────────────────────────────────────────────────
@@ -108,6 +162,42 @@ class LLMClient(ABC):
             True 表示服务可用。
         """
         ...
+
+    def supports_tools(self) -> bool:
+        """是否支持工具调用（Agent Loop）。
+
+        默认 False；支持 tool-calling 的实现需覆写为 True。
+        """
+        return False
+
+    async def chat(
+        self,
+        messages: list[ChatMessage],
+        system: str = "",
+        tools: Optional[list[ToolSpec]] = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.7,
+        **kwargs,
+    ) -> ChatResult:
+        """带工具调用能力的多轮对话接口。
+
+        Args:
+            messages: 规范化的对话消息列表。
+            system: 系统提示词。
+            tools: 可供模型调用的工具声明列表。
+            max_tokens: 最大生成 token 数。
+            temperature: 生成温度。
+
+        Returns:
+            ChatResult，包含文本和/或工具调用请求。
+
+        Raises:
+            LLMError: 请求失败或该 Provider 不支持工具调用时抛出。
+        """
+        raise LLMError(
+            "This provider does not support tool-calling chat",
+            provider=getattr(self, "model", "unknown"),
+        )
 
 
 # Keep backward compat alias

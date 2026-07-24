@@ -37,6 +37,18 @@ class OllamaClient(LLMClient):
         except (httpx.ConnectError, httpx.TimeoutException):
             return False
 
+    def supports_tools(self) -> bool:
+        """Ollama tool-calling is not supported yet."""
+        return False
+
+    async def chat(self, *args, **kwargs):
+        """Tool-calling chat is not supported for the local Ollama backend yet."""
+        raise LLMError(
+            "Ollama backend does not support tool-calling (Agent Loop) yet; "
+            "use a cloud provider (anthropic/openai) for agent mode.",
+            provider="ollama",
+        )
+
     async def generate(
         self,
         prompt: str,

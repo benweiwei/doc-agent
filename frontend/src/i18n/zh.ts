@@ -88,6 +88,15 @@ export default {
   tabs: {
     close: '关闭标签',
   },
+  agent: {
+    mode: 'Agent 模式',
+    modeHint: '多步工具调用（读取/检索/编辑/联网搜索）',
+    thinkingStep: '第 {step} 步思考中...',
+    stepLabel: '第 {step} 步',
+    callingTool: '调用工具 {tool}...',
+    timeline: 'Agent 活动',
+    emptyTimeline: '本次运行暂无工具调用',
+  },
   interaction: {
     title: '交互记录',
     empty: '暂无交互记录',

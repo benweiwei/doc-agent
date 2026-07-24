@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from doc_agent import __version__
 from doc_agent.agent import DocumentEditor
+from doc_agent.agent_loop import AgentSession
 from doc_agent.config import AppConfig, load_config
 from doc_agent.llm import LLMError
 from doc_agent.models import ConflictResolveRequest, EditRequest
@@ -274,6 +275,27 @@ async def commit_edit(req: CommitRequest):
         message=req.message,
     )
     return {"commit_hash": commit_hash, "document_id": req.document_id}
+
+
+@app.post("/api/agent")
+async def run_agent(req: EditRequest):
+    """Run the multi-step agent loop (non-streaming).
+
+    Executes tool-use iterations and returns the final edit_response
+    (structure aligned with /api/edit). Does not commit.
+    """
+    config = _get_config()
+    session = AgentSession(config, editor=_get_editor())
+    edit_response: Optional[dict] = None
+    error: Optional[str] = None
+    async for event in session.run(req):
+        if event.get("type") == "complete":
+            edit_response = event.get("edit_response")
+        elif event.get("type") == "error":
+            error = event.get("message")
+    if edit_response is None:
+        raise HTTPException(status_code=502, detail=error or "Agent produced no result")
+    return {"edit_response": edit_response, "error": error}
 
 
 # ─── Branch Management ────────────────────────────────────────────────────────
@@ -626,17 +648,91 @@ async def learn_style_from_docs():
 # ─── WebSocket ────────────────────────────────────────────────────────────────
 
 
-@app.websocket("/ws/edit")
-async def websocket_edit(ws: WebSocket):
-    """WebSocket endpoint for streaming document edits.
+async def _handle_edit_message(ws: WebSocket, msg: dict) -> None:
+    """Run the classic single-shot streaming edit for one message."""
+    try:
+        request = EditRequest(
+            document_id=msg["document_id"],
+            instruction=msg["instruction"],
+            branch=msg.get("branch"),
+            selection=msg.get("selection"),
+            style_template=msg.get("style_template"),
+        )
+    except (KeyError, Exception) as e:
+        await ws.send_json({"type": "error", "message": f"Invalid edit request: {e}"})
+        return
 
-    Client sends: {"type": "edit", "document_id": "...", "instruction": "...", "branch": "...", "selection": "..."}
-    Server streams: {"type": "token", "content": "..."}
-    Server completes: {"type": "complete", "edit_response": {...}}
-    Server error: {"type": "error", "message": "..."}
+    editor = _get_editor()
+    collected_tokens: list[str] = []
+    try:
+        async for token in editor.edit_document_stream(request):
+            collected_tokens.append(token)
+            await ws.send_json({"type": "token", "content": token})
+
+        # After streaming completes, build full response
+        full_content = "".join(collected_tokens)
+
+        # Post-process: strip code block wrappers and preambles
+        full_content = editor._post_process(full_content, editor._detect_format(request.document_id))
+
+        # Load original for diff
+        vcs = _get_vcs()
+        branch = request.branch or vcs.get_current_branch()
+        original_content, resolved_branch = vcs.load_document(request.document_id, branch)
+
+        edit_response = {
+            "document_id": request.document_id,
+            "original_content": original_content,
+            "edited_content": full_content,
+            "diff_summary": editor._generate_diff(original_content, full_content).unified_diff,
+            "branch": resolved_branch,
+            "commit_hash": None,
+        }
+
+        await ws.send_json({"type": "complete", "edit_response": edit_response})
+
+    except (VCSError, LLMError) as e:
+        await ws.send_json({"type": "error", "message": str(e)})
+    except Exception as e:
+        logger.exception("Unexpected error in WebSocket edit stream")
+        await ws.send_json({"type": "error", "message": f"Internal error: {e}"})
+
+
+async def _handle_agent_message(ws: WebSocket, msg: dict) -> None:
+    """Run the multi-step agent loop for one message."""
+    try:
+        request = EditRequest(
+            document_id=msg["document_id"],
+            instruction=msg["instruction"],
+            branch=msg.get("branch"),
+            selection=msg.get("selection"),
+            style_template=msg.get("style_template"),
+        )
+    except (KeyError, Exception) as e:
+        await ws.send_json({"type": "error", "message": f"Invalid agent request: {e}"})
+        return
+
+    config = _get_config()
+    session = AgentSession(config, editor=_get_editor())
+    try:
+        async for event in session.run(request):
+            await ws.send_json(event)
+    except (VCSError, LLMError) as e:
+        await ws.send_json({"type": "error", "message": str(e)})
+    except Exception as e:
+        logger.exception("Unexpected error in WebSocket agent loop")
+        await ws.send_json({"type": "error", "message": f"Internal error: {e}"})
+
+
+async def _ws_dispatch_loop(ws: WebSocket) -> None:
+    """Shared receive loop that dispatches each message by its ``type``.
+
+    Both /ws/edit and /ws/agent use this loop, so a message routed to either
+    endpoint is handled by its declared type. This removes any dependency on
+    which URL the client happened to connect to (avoiding reconnect races when
+    the client toggles between edit and agent modes).
     """
     await ws.accept()
-
     try:
         while True:
             raw = await ws.receive_text()
@@ -653,63 +749,34 @@ async def websocket_edit(ws: WebSocket):
                     await ws.send_json({"type": "pong"})
                 continue
 
-            if msg_type != "edit":
+            if msg_type == "edit":
+                await _handle_edit_message(ws, msg)
+            elif msg_type == "agent":
+                await _handle_agent_message(ws, msg)
+            else:
                 await ws.send_json({"type": "error", "message": f"Unknown message type: {msg_type}"})
-                continue
-
-            # Build EditRequest
-            try:
-                request = EditRequest(
-                    document_id=msg["document_id"],
-                    instruction=msg["instruction"],
-                    branch=msg.get("branch"),
-                    selection=msg.get("selection"),
-                    style_template=msg.get("style_template"),
-                )
-            except (KeyError, Exception) as e:
-                await ws.send_json({"type": "error", "message": f"Invalid edit request: {e}"})
-                continue
-
-            # Stream tokens
-            editor = _get_editor()
-            collected_tokens: list[str] = []
-            try:
-                async for token in editor.edit_document_stream(request):
-                    collected_tokens.append(token)
-                    await ws.send_json({"type": "token", "content": token})
-
-                # After streaming completes, build full response
-                full_content = "".join(collected_tokens)
-
-                # Post-process: strip code block wrappers and preambles
-                full_content = editor._post_process(full_content, editor._detect_format(request.document_id))
-
-                # Load original for diff
-                vcs = _get_vcs()
-                branch = request.branch or vcs.get_current_branch()
-                original_content, resolved_branch = vcs.load_document(request.document_id, branch)
-
-                edit_response = {
-                    "document_id": request.document_id,
-                    "original_content": original_content,
-                    "edited_content": full_content,
-                    "diff_summary": editor._generate_diff(original_content, full_content).unified_diff,
-                    "branch": resolved_branch,
-                    "commit_hash": None,
-                }
-
-                await ws.send_json({"type": "complete", "edit_response": edit_response})
-
-            except (VCSError, LLMError) as e:
-                await ws.send_json({"type": "error", "message": str(e)})
-            except Exception as e:
-                logger.exception("Unexpected error in WebSocket edit stream")
-                await ws.send_json({"type": "error", "message": f"Internal error: {e}"})
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.exception("WebSocket connection error: %s", e)
+
+
+@app.websocket("/ws/edit")
+async def websocket_edit(ws: WebSocket):
+    """WebSocket endpoint accepting both edit and agent messages (dispatched by type)."""
+    await _ws_dispatch_loop(ws)
+
+
+@app.websocket("/ws/agent")
+async def websocket_agent(ws: WebSocket):
+    """WebSocket endpoint accepting both agent and edit messages (dispatched by type).
+
+    Client sends: {"type": "agent", "document_id": "...", "instruction": "...",
+                   "branch": "...", "selection": "...", "style_template": "..."}
+    Server streams agent events: step / tool_call / tool_result / token / complete / error.
+    """
+    await _ws_dispatch_loop(ws)
 
 
 # ─── Static Files & SPA Fallback ─────────────────────────────────────────────

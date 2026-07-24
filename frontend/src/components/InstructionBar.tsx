@@ -206,9 +206,15 @@ export function InstructionBar({
   const [progressMsg, setProgressMsg] = useState("");
   const [editDone, setEditDone] = useState(false);
   const [error, setError] = useState("");
+  const [agentMode, setAgentMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const wsUrl = `ws://${window.location.host}/ws/edit`;
+  // A single stable WebSocket connection handles both modes; the server
+  // dispatches by message `type` ("edit" | "agent"). Keeping the URL constant
+  // avoids tearing down / rebuilding the socket when the user toggles Agent
+  // mode, which previously caused a race where a message was sent on the old
+  // connection ("Unknown message type").
+  const wsUrl = `ws://${window.location.host}/ws/agent`;
   const { sendMessage, lastMessage, isConnected } = useWebSocket(wsUrl);
 
   useEffect(() => {
@@ -231,7 +237,45 @@ export function InstructionBar({
   useEffect(() => {
     if (!lastMessage) return;
 
-    if (lastMessage.type === "token") {
+    if (lastMessage.type === "step") {
+      // Agent loop iteration marker.
+      const step = (lastMessage as { type: string; step?: number }).step ?? 0;
+      setProgressMsg(t('agent.thinkingStep').replace('{step}', String(step)));
+      dispatch({
+        type: "PUSH_AGENT_EVENT",
+        payload: {
+          id: `step-${step}-${Date.now()}`,
+          kind: "step",
+          timestamp: new Date().toISOString(),
+          label: t('agent.stepLabel').replace('{step}', String(step)),
+        },
+      });
+    } else if (lastMessage.type === "tool_call") {
+      const data = lastMessage as { type: string; id: string; name: string; arguments?: Record<string, unknown> };
+      setProgressMsg(t('agent.callingTool').replace('{tool}', data.name));
+      dispatch({
+        type: "PUSH_AGENT_EVENT",
+        payload: {
+          id: `call-${data.id}`,
+          kind: "tool_call",
+          timestamp: new Date().toISOString(),
+          label: data.name,
+          detail: JSON.stringify(data.arguments ?? {}, null, 2),
+        },
+      });
+    } else if (lastMessage.type === "tool_result") {
+      const data = lastMessage as { type: string; id: string; name: string; result?: string };
+      dispatch({
+        type: "PUSH_AGENT_EVENT",
+        payload: {
+          id: `result-${data.id}`,
+          kind: "tool_result",
+          timestamp: new Date().toISOString(),
+          label: data.name,
+          detail: data.result || "",
+        },
+      });
+    } else if (lastMessage.type === "token") {
       const tokenContent = (lastMessage as { type: string; content: string }).content || "";
       // Append token to streaming content
       dispatch({ type: "APPEND_STREAMING_CONTENT", payload: tokenContent });
@@ -278,11 +322,12 @@ export function InstructionBar({
       // Start streaming mode
       dispatch({ type: "CLEAR_STREAMING" });
       dispatch({ type: "SET_STREAMING", payload: true });
+      dispatch({ type: "CLEAR_AGENT_TIMELINE" });
       onEditStart();
       onInstructionSubmit?.(instruction.trim(), selectedText || undefined);
 
       sendMessage({
-        type: "edit",
+        type: agentMode ? "agent" : "edit",
         document_id: documentId,
         instruction: instruction.trim(),
         branch,
@@ -292,7 +337,7 @@ export function InstructionBar({
 
       setInstruction("");
     },
-    [instruction, documentId, branch, selectedText, isLoading, sendMessage, onEditStart, dispatch, t]
+    [instruction, documentId, branch, selectedText, isLoading, agentMode, sendMessage, onEditStart, dispatch, t]
   );
 
   const handleKeyDown = useCallback(
@@ -352,6 +397,22 @@ export function InstructionBar({
           </select>
         </div>
       )}
+
+      {/* Agent mode toggle */}
+      <div style={barStyles.styleRow}>
+        <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={agentMode}
+            disabled={isLoading}
+            onChange={(e) => setAgentMode(e.target.checked)}
+          />
+          <span>{t('agent.mode')}</span>
+        </label>
+        <span style={{ fontSize: "11px", color: colors.textMuted, opacity: 0.7 }}>
+          {t('agent.modeHint')}
+        </span>
+      </div>
 
       {/* Selection hint - enhanced */}
       <div style={barStyles.selectionHint}>

@@ -136,6 +136,45 @@ export interface WsErrorMessage {
   message: string;
 }
 
+// --- Agent Loop WebSocket Messages (/ws/agent) ---
+
+export interface WsAgentRequest {
+  type: "agent";
+  document_id: string;
+  instruction: string;
+  branch?: string;
+  selection?: string;
+  style_template?: string;
+}
+
+export interface WsStepMessage {
+  type: "step";
+  step: number;
+}
+
+export interface WsToolCallMessage {
+  type: "tool_call";
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface WsToolResultMessage {
+  type: "tool_result";
+  id: string;
+  name: string;
+  result: string;
+}
+
+// A single entry rendered in the agent activity timeline.
+export interface AgentTimelineEvent {
+  id: string;                          // unique key
+  kind: "step" | "tool_call" | "tool_result";
+  timestamp: string;                   // ISO time
+  label: string;                       // short human-readable summary
+  detail?: string;                     // optional expanded detail (args / result)
+}
+
 // --- Style Template ---
 
 export interface StyleTemplateDTO {

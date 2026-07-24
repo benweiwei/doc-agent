@@ -63,6 +63,23 @@ class WorkspaceConfig(BaseModel):
     path: str = "~/.doc-agent/workspace"
 
 
+class SearchConfig(BaseModel):
+    """Web search backend configuration."""
+
+    provider: Literal["duckduckgo", "tavily", "brave", "bocha"] = "duckduckgo"
+    api_key_env: Optional[str] = None  # env var holding the API key (tavily/brave/bocha)
+    api_key: Optional[str] = None  # direct API key (takes precedence over api_key_env)
+
+
+class AgentConfig(BaseModel):
+    """Agent loop (tool-use) configuration."""
+
+    max_steps: int = 10  # max tool-use iterations before forcing a stop
+    token_budget: int = 0  # cumulative output-token budget; 0 = unlimited
+    enable_web_search: bool = True
+    search: SearchConfig = Field(default_factory=SearchConfig)
+
+
 class AppConfig(BaseSettings):
     """Application configuration.
 
@@ -78,6 +95,7 @@ class AppConfig(BaseSettings):
     model: ModelConfig = Field(default_factory=ModelConfig)
     style: StyleConfig = Field(default_factory=StyleConfig)
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
 
 
 def _find_config_file(config_path: Optional[Path] = None) -> Optional[Path]:

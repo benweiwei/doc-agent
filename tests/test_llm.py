@@ -133,3 +133,94 @@ class TestHybridClient:
             collected.append(token)
 
         assert collected == tokens
+
+
+class TestChatToolCalling:
+    """chat() 工具调用：请求组装与响应解析（mock SDK）。"""
+
+    @pytest.mark.asyncio
+    async def test_anthropic_chat_parses_text_and_tool_use(self):
+        from doc_agent.llm.anthropic_client import AnthropicClient
+        from doc_agent.llm.base import ChatMessage, ToolSpec
+
+        client = AnthropicClient(model="claude", api_key_env="X")
+        assert client.supports_tools() is True
+
+        text_block = MagicMock(type="text")
+        text_block.text = "hello"
+        tool_block = MagicMock(type="tool_use")
+        tool_block.id = "t1"
+        tool_block.name = "read_document"
+        tool_block.input = {"document_id": "a.md"}
+        resp = MagicMock()
+        resp.content = [text_block, tool_block]
+        resp.stop_reason = "tool_use"
+        resp.usage = MagicMock(input_tokens=1, output_tokens=2)
+
+        fake_client = MagicMock()
+        fake_client.messages.create = AsyncMock(return_value=resp)
+        client._client = fake_client
+
+        result = await client.chat(
+            [ChatMessage(role="user", content="hi")],
+            tools=[ToolSpec(name="read_document", description="d", parameters={"type": "object"})],
+        )
+
+        assert result.text == "hello"
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].name == "read_document"
+        assert result.tool_calls[0].arguments == {"document_id": "a.md"}
+        _, kwargs = fake_client.messages.create.call_args
+        assert kwargs["tools"][0]["name"] == "read_document"
+        assert "input_schema" in kwargs["tools"][0]
+
+    @pytest.mark.asyncio
+    async def test_openai_chat_parses_tool_calls(self):
+        from doc_agent.llm.openai_client import OpenAIClient
+        from doc_agent.llm.base import ChatMessage, ToolSpec
+
+        client = OpenAIClient(model="gpt", api_key="k")
+        assert client.supports_tools() is True
+
+        func = MagicMock()
+        func.name = "apply_edit"
+        func.arguments = '{"document_id": "a.md", "new_content": "x"}'
+        tc = MagicMock()
+        tc.id = "t1"
+        tc.function = func
+        message = MagicMock()
+        message.content = "ok"
+        message.tool_calls = [tc]
+        choice = MagicMock()
+        choice.message = message
+        choice.finish_reason = "tool_calls"
+        resp = MagicMock()
+        resp.choices = [choice]
+        resp.usage = MagicMock(prompt_tokens=1, completion_tokens=2)
+
+        fake_client = MagicMock()
+        fake_client.chat.completions.create = AsyncMock(return_value=resp)
+        client._client = fake_client
+
+        result = await client.chat(
+            [ChatMessage(role="user", content="hi")],
+            tools=[ToolSpec(name="apply_edit", description="d", parameters={})],
+        )
+
+        assert result.text == "ok"
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0].name == "apply_edit"
+        assert result.tool_calls[0].arguments["document_id"] == "a.md"
+        _, kwargs = fake_client.chat.completions.create.call_args
+        assert kwargs["tools"][0]["type"] == "function"
+        assert kwargs["tools"][0]["function"]["name"] == "apply_edit"
+
+    @pytest.mark.asyncio
+    async def test_ollama_chat_raises(self):
+        from doc_agent.llm import LLMError
+        from doc_agent.llm.ollama_client import OllamaClient
+
+        client = OllamaClient()
+        assert client.supports_tools() is False
+        with pytest.raises(LLMError):
+            await client.chat([])

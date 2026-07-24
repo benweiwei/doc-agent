@@ -88,6 +88,15 @@ export default {
   tabs: {
     close: 'Close tab',
   },
+  agent: {
+    mode: 'Agent Mode',
+    modeHint: 'Multi-step tool use (read/search/edit/web)',
+    thinkingStep: 'Thinking (step {step})...',
+    stepLabel: 'Step {step}',
+    callingTool: 'Calling {tool}...',
+    timeline: 'Agent Activity',
+    emptyTimeline: 'No tool calls in this run',
+  },
   interaction: {
     title: 'Interactions',
     empty: 'No interactions yet',

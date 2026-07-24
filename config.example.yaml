@@ -25,3 +25,14 @@ workspace:
   auto_detect_git: true
   # Branch naming pattern for doc branches
   branch_prefix: "docs/"
+
+agent:
+  # Multi-step agent loop (tool use) settings
+  max_steps: 10           # max tool-use iterations before forcing a stop
+  token_budget: 0         # cumulative output-token budget; 0 = unlimited
+  enable_web_search: true
+  search:
+    # Web search backend: duckduckgo (no key) | tavily | brave
+    provider: "duckduckgo"
+    # Env var holding the API key for tavily/brave (leave null for duckduckgo)
+    api_key_env: null

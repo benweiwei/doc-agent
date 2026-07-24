@@ -12,11 +12,15 @@ import structlog
 
 from doc_agent.llm.base import (
     BaseLLMClient,
+    ChatMessage,
+    ChatResult,
     LLMClient,
     LLMError,
     LLMRateLimitError,
     LLMTimeoutError,
     LLMUnavailableError,
+    ToolCall,
+    ToolSpec,
 )
 
 logger = structlog.get_logger(__name__)
@@ -28,6 +32,10 @@ __all__ = [
     "LLMTimeoutError",
     "LLMRateLimitError",
     "LLMUnavailableError",
+    "ChatMessage",
+    "ChatResult",
+    "ToolCall",
+    "ToolSpec",
     "HybridClient",
     "create_client",
 ]
@@ -67,6 +75,54 @@ class HybridClient(LLMClient):
         if self.fallback is not None:
             return self.fallback.is_available()
         return False
+
+    def supports_tools(self) -> bool:
+        """Tool support if either primary or fallback supports it."""
+        if self.primary.supports_tools():
+            return True
+        if self.fallback is not None:
+            return self.fallback.supports_tools()
+        return False
+
+    async def chat(self, *args, **kwargs):
+        """Tool-calling chat with retry and fallback."""
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries):
+            try:
+                return await self.primary.chat(*args, **kwargs)
+            except Exception as e:
+                last_error = e
+                if not _is_retryable(e):
+                    logger.warning(
+                        "hybrid.chat.primary.non_retryable",
+                        error=str(e),
+                        attempt=attempt + 1,
+                    )
+                    break
+                wait = 2**attempt
+                logger.warning(
+                    "hybrid.chat.primary.retry",
+                    error=str(e),
+                    attempt=attempt + 1,
+                    wait_seconds=wait,
+                )
+                await asyncio.sleep(wait)
+
+        if self.fallback is not None and self.fallback.supports_tools():
+            logger.info("hybrid.chat.fallback", reason=str(last_error))
+            try:
+                return await self.fallback.chat(*args, **kwargs)
+            except Exception as fallback_error:
+                logger.error("hybrid.chat.fallback.failed", error=str(fallback_error))
+                raise LLMError(
+                    f"Both primary and fallback failed. "
+                    f"Primary: {last_error}, Fallback: {fallback_error}",
+                    provider="hybrid",
+                ) from fallback_error
+
+        if last_error is not None:
+            raise last_error
+        raise LLMError("No LLM client available", provider="hybrid")
 
     async def generate(
         self,

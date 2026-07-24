@@ -1,5 +1,26 @@
 # 更新日志
 
+## v1.1.0 (2026-07-24)
+
+### 新增功能
+
+- Agent 多步工具调用循环（Agent Loop）：AI 可自主读取、列出、搜索、编辑文档，并联网检索资料，多步迭代完成复杂编辑任务
+- 工具系统（`doc_agent/tools/`）：文档读写工具 + 可插拔联网搜索工具，统一注册与调度
+- 联网搜索多后端支持：DuckDuckGo（默认，免密钥）/ Tavily / Brave / 博查（Bocha），可通过配置切换
+- LLM 工具调用能力：抽象层新增 `chat()` 接口与 `ToolSpec`/`ToolCall`/`ChatResult` 结构，Anthropic、OpenAI 均支持 function calling
+- OpenAI 兼容模式：支持自定义 `base_url`，可对接阿里云百炼 MaaS 等 OpenAI 兼容端点
+- 前端 Agent 模式：交互面板实时展示每一步工具调用、结果与最终编辑
+- API 密钥直填：`config.yaml` 支持直接填写云模型与搜索后端密钥（优先于环境变量）
+
+### 修复
+
+- 修复 Agent/编辑模式切换时 WebSocket 重连竞态导致的“无输出 / Accept 后空白 / Unknown message type”问题：两个 WebSocket 端点改为按消息 `type` 统一分发，前端固定连接 URL
+
+### 技术架构
+
+- 新增配置：`agent`（max_steps / token_budget / enable_web_search / search 后端）
+- WebSocket 共享分发循环 `_ws_dispatch_loop`，端点与消息类型解耦
+
 ## v1.0.0 (2026-07-23)
 
 ### 核心功能

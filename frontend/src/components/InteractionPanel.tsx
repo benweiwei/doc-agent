@@ -51,6 +51,18 @@ function truncateText(text: string, maxLen: number): string {
   return text.slice(0, maxLen) + "...";
 }
 
+function agentEventColor(kind: string): string {
+  switch (kind) {
+    case "tool_call":
+      return colors.statusBlue;
+    case "tool_result":
+      return colors.statusGreen;
+    case "step":
+    default:
+      return colors.textMuted;
+  }
+}
+
 // --- Component ---
 
 export function InteractionPanel() {
@@ -59,6 +71,7 @@ export function InteractionPanel() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const records = state.interactionHistory;
+  const timeline = state.agentTimeline;
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -72,7 +85,65 @@ export function InteractionPanel() {
     });
   };
 
-  if (records.length === 0) {
+  // Live agent activity timeline (step / tool_call / tool_result).
+  const timelineBlock = timeline.length > 0 ? (
+    <div style={{
+      borderBottom: `1px solid ${colors.border}`,
+      padding: "8px 12px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
+    }}>
+      <div style={{
+        fontSize: "10px",
+        fontWeight: 600,
+        letterSpacing: "0.5px",
+        textTransform: "uppercase",
+        color: colors.accent,
+      }}>
+        {t("agent.timeline")}
+      </div>
+      {timeline.map((ev) => (
+        <div key={ev.id} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+          <span style={{
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            marginTop: "5px",
+            backgroundColor: agentEventColor(ev.kind),
+            flexShrink: 0,
+          }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: "11px",
+              color: colors.text,
+              fontFamily: ev.kind === "step"
+                ? "system-ui, -apple-system, sans-serif"
+                : "ui-monospace, 'SF Mono', Menlo, monospace",
+            }}>
+              {ev.label}
+            </div>
+            {ev.detail && (
+              <pre style={{
+                margin: "2px 0 0",
+                fontSize: "10px",
+                color: colors.textMuted,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                maxHeight: "80px",
+                overflow: "auto",
+                fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace",
+              }}>
+                {ev.detail.length > 300 ? ev.detail.slice(0, 300) + "\n..." : ev.detail}
+              </pre>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
+  if (records.length === 0 && timeline.length === 0) {
     return (
       <div style={{
         padding: "16px 12px",
@@ -93,6 +164,7 @@ export function InteractionPanel() {
       overflow: "auto",
       padding: "4px 0",
     }}>
+      {timelineBlock}
       {records.map((record) => {
         const isExpanded = expandedIds.has(record.id);
         const dotColor = getStatusDotColor(record.status);
