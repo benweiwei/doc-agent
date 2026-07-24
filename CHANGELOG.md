@@ -1,5 +1,24 @@
 # 更新日志
 
+## v1.2.0 (2026-07-24)
+
+### 新增功能
+
+- 编辑器图片导入：接入 `@tiptap/extension-image`，工具栏「插入图片」上传到后端并插入文档
+- 代码转架构图：选中代码经 LLM 生成 Mermaid 定义并插入代码块
+- 丰富导出：导出菜单新增 HTML（自包含，内嵌样式 + mermaid CDN 渲染，相对图片转绝对）
+- 编辑自动保存：停止输入约 2s 防抖自动提交，工具条含开关（localStorage 持久化，审阅 AI diff 期间不触发）
+
+### 后端新增端点
+
+- `POST /api/assets` + `GET /api/assets/{name}`：图片上传/服务（类型与大小校验、防路径穿越）
+- `GET /api/export/{doc_id}?format=html`：Markdown 转自包含 HTML
+- `POST /api/diagram/from-code`：代码转 Mermaid 定义
+
+### 依赖
+
+- 新增运行时依赖：`markdown`、`python-multipart`
+
 ## v1.1.0 (2026-07-24)
 
 ### 新增功能
