@@ -419,22 +419,24 @@ class DocumentEditor:
     def _load_habit_profile(self) -> Optional[dict]:
         """加载习惯画像文件。
 
-        从 config.style.habit_profile 指定的文件路径读取 JSON 格式的习惯画像。
+        优先使用 config.style.habit_profile 指定的路径；未配置时回退到
+        “学习风格”默认保存位置 ~/.doc-agent/habit_profile.json，使学到的
+        个人风格在 Agent / 单发模式下都能自动注入。
 
         Returns:
             习惯画像字典，或 None。
         """
         habit_path = self.config.style.habit_profile
-        if not habit_path:
-            return None
-
-        path = Path(habit_path).expanduser()
-        if not path.is_absolute():
-            # 相对于 workspace 目录
-            path = Path(self.config.workspace.path).expanduser() / path
+        if habit_path:
+            path = Path(habit_path).expanduser()
+            if not path.is_absolute():
+                # 相对于 workspace 目录
+                path = Path(self.config.workspace.path).expanduser() / path
+        else:
+            # 回退到 HabitAnalyzer 的默认保存位置
+            path = Path.home() / ".doc-agent" / "habit_profile.json"
 
         if not path.exists():
-            logger.warning("Habit profile not found: %s", path)
             return None
 
         try:

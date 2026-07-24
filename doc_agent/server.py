@@ -278,6 +278,32 @@ async def get_document(doc_id: str, branch: Optional[str] = None):
     }
 
 
+class RenameDocumentRequest(BaseModel):
+    new_id: str
+    branch: Optional[str] = None
+
+
+@app.put("/api/documents/{doc_id:path}")
+async def rename_document(doc_id: str, req: RenameDocumentRequest):
+    """Rename a document (git mv + commit)."""
+    vcs = _get_vcs()
+    new_id = req.new_id.strip()
+    if not new_id:
+        raise HTTPException(status_code=400, detail="new_id is required")
+    if new_id == doc_id:
+        return {"status": "ok", "document_id": doc_id, "commit_hash": None}
+    commit_hash = vcs.rename_document(doc_id, new_id, req.branch)
+    return {"status": "ok", "old_id": doc_id, "document_id": new_id, "commit_hash": commit_hash}
+
+
+@app.delete("/api/documents/{doc_id:path}")
+async def delete_document(doc_id: str, branch: Optional[str] = None):
+    """Delete a document (git rm + commit)."""
+    vcs = _get_vcs()
+    commit_hash = vcs.delete_document(doc_id, branch)
+    return {"status": "ok", "document_id": doc_id, "commit_hash": commit_hash}
+
+
 # ─── Edit ─────────────────────────────────────────────────────────────────────
 
 

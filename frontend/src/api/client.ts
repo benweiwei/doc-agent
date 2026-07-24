@@ -102,6 +102,20 @@ export const api = {
     };
   },
 
+  async renameDocument(docId: string, newId: string, branch?: string): Promise<{ document_id: string }> {
+    return request<{ document_id: string }>(`/documents/${docId}`, {
+      method: "PUT",
+      body: JSON.stringify({ new_id: newId, branch: branch || undefined }),
+    });
+  },
+
+  async deleteDocument(docId: string, branch?: string): Promise<{ status: string }> {
+    const params = branch ? `?branch=${encodeURIComponent(branch)}` : "";
+    return request<{ status: string }>(`/documents/${docId}${params}`, {
+      method: "DELETE",
+    });
+  },
+
   // --- Edit ---
 
   submitEdit(editRequest: EditRequest): Promise<EditResponse> {

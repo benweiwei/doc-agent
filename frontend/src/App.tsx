@@ -348,6 +348,61 @@ function App() {
     [state.currentBranch, dispatch]
   );
 
+  const handleRenameDocument = useCallback(
+    async (docId: string, newIdRaw: string) => {
+      let newId = newIdRaw.trim();
+      if (!newId || newId === docId) return;
+      // Preserve the original extension if the user didn't provide one.
+      const extMatch = docId.match(/\.[^./]+$/);
+      const ext = extMatch ? extMatch[0] : "";
+      if (ext && !/\.[^./]+$/.test(newId)) {
+        newId = newId + ext;
+      }
+      try {
+        await api.renameDocument(docId, newId, state.currentBranch);
+        const docs = await api.listDocuments(state.currentBranch);
+        dispatch({ type: "SET_DOCUMENTS", payload: docs });
+        const all = await api.listAllDocuments();
+        dispatch({ type: "SET_ALL_DOCUMENTS", documents: all.documents });
+        dispatch({ type: "OPEN_TAB", payload: { docId: newId, title: newId } });
+        dispatch({ type: "CLOSE_TAB", payload: docId });
+        if (state.currentDocument?.id === docId) {
+          const doc = await api.getDocument(newId, state.currentBranch);
+          dispatch({ type: "SET_CURRENT_DOCUMENT", payload: doc });
+        }
+      } catch (err) {
+        console.error("Failed to rename document:", err);
+      }
+    },
+    [state.currentBranch, state.currentDocument, dispatch]
+  );
+
+  const handleDeleteDocument = useCallback(
+    async (docId: string) => {
+      try {
+        await api.deleteDocument(docId, state.currentBranch);
+        const docs = await api.listDocuments(state.currentBranch);
+        dispatch({ type: "SET_DOCUMENTS", payload: docs });
+        const all = await api.listAllDocuments();
+        dispatch({ type: "SET_ALL_DOCUMENTS", documents: all.documents });
+        const wasCurrent = state.currentDocument?.id === docId;
+        const remaining = state.openTabs.filter((tab) => tab.docId !== docId);
+        dispatch({ type: "CLOSE_TAB", payload: docId });
+        if (wasCurrent) {
+          if (remaining.length > 0) {
+            const doc = await api.getDocument(remaining[0]!.docId, state.currentBranch);
+            dispatch({ type: "SET_CURRENT_DOCUMENT", payload: doc });
+          } else {
+            dispatch({ type: "SET_CURRENT_DOCUMENT", payload: null });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to delete document:", err);
+      }
+    },
+    [state.currentBranch, state.currentDocument, state.openTabs, dispatch]
+  );
+
   // --- Tab handlers ---
 
   const handleSwitchTab = useCallback(
@@ -764,6 +819,8 @@ function App() {
             onRenameBranch={handleRenameBranch}
             onSelectDocument={handleSelectDocument}
             onCreateDocument={handleCreateDocument}
+            onRenameDocument={handleRenameDocument}
+            onDeleteDocument={handleDeleteDocument}
           />
         </aside>
 

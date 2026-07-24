@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { GitBranch, Plus, File, ChevronDown, Pencil, Check } from "lucide-react";
+import { GitBranch, Plus, File, ChevronDown, Pencil, Check, Trash2 } from "lucide-react";
 import type { BranchInfo, UnifiedDocument } from "../types";
 import { useI18n } from "../context/I18nContext";
 
@@ -17,6 +17,8 @@ interface BranchPanelProps {
   onRenameBranch: (oldName: string, newName: string) => void;
   onSelectDocument: (docId: string) => void;
   onCreateDocument: (title: string) => void;
+  onRenameDocument: (docId: string, newId: string) => void;
+  onDeleteDocument: (docId: string) => void;
 }
 
 // --- Style constants ---
@@ -47,6 +49,8 @@ export function BranchPanel({
   onRenameBranch,
   onSelectDocument,
   onCreateDocument,
+  onRenameDocument,
+  onDeleteDocument,
 }: BranchPanelProps) {
   const { t } = useI18n();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -57,6 +61,9 @@ export function BranchPanel({
   const [newDocTitle, setNewDocTitle] = useState("");
   const [renamingBranch, setRenamingBranch] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renamingDoc, setRenamingDoc] = useState<string | null>(null);
+  const [docRenameValue, setDocRenameValue] = useState("");
+  const docRenameInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +122,40 @@ export function BranchPanel({
   const cancelRename = () => {
     setRenamingBranch(null);
     setRenameValue("");
+  };
+
+  useEffect(() => {
+    if (renamingDoc && docRenameInputRef.current) {
+      docRenameInputRef.current.focus();
+      docRenameInputRef.current.select();
+    }
+  }, [renamingDoc]);
+
+  const startDocRename = (docId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenamingDoc(docId);
+    setDocRenameValue(docId);
+  };
+
+  const submitDocRename = () => {
+    const next = docRenameValue.trim();
+    if (renamingDoc && next && next !== renamingDoc) {
+      onRenameDocument(renamingDoc, next);
+    }
+    setRenamingDoc(null);
+    setDocRenameValue("");
+  };
+
+  const cancelDocRename = () => {
+    setRenamingDoc(null);
+    setDocRenameValue("");
+  };
+
+  const handleDeleteDoc = (docId: string, title: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(t("document.deleteConfirm").replace("{name}", title))) {
+      onDeleteDocument(docId);
+    }
   };
 
   const handleSelectBranch = (branchName: string | null) => {
@@ -506,6 +547,7 @@ export function BranchPanel({
           {documents.map((doc) => (
             <div
               key={doc.id}
+              className="doc-row"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -520,7 +562,7 @@ export function BranchPanel({
                 backgroundColor: doc.id === currentDocId ? "rgba(137,180,250,0.08)" : "transparent",
                 transition: "background-color 0.1s",
               }}
-              onClick={() => onSelectDocument(doc.id)}
+              onClick={() => { if (renamingDoc !== doc.id) onSelectDocument(doc.id); }}
               onMouseEnter={(e) => {
                 if (doc.id !== currentDocId) {
                   (e.currentTarget as HTMLElement).style.backgroundColor = colors.hover;
@@ -533,26 +575,69 @@ export function BranchPanel({
               }}
             >
               <File size={13} color={doc.id === currentDocId ? colors.accent : colors.textMuted} />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                {doc.title}
-              </span>
-              {!branchFilter && doc.branches.length > 0 && (
-                <span style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "1px 5px",
-                  borderRadius: "3px",
-                  fontSize: "10px",
-                  fontWeight: 500,
-                  backgroundColor: colors.badge,
-                  color: colors.textMuted,
-                  marginLeft: "4px",
-                  whiteSpace: "nowrap",
-                }}>
-                  {doc.branches.length > 1
-                    ? `${doc.branches.length}`
-                    : doc.branches[0]?.replace("target/", "")}
-                </span>
+              {renamingDoc === doc.id ? (
+                <input
+                  ref={docRenameInputRef}
+                  style={{
+                    flex: 1,
+                    backgroundColor: colors.sidebar,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: "4px",
+                    padding: "2px 6px",
+                    color: colors.text,
+                    fontSize: "12px",
+                    outline: "none",
+                    minWidth: 0,
+                  }}
+                  value={docRenameValue}
+                  onChange={(e) => setDocRenameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitDocRename();
+                    if (e.key === "Escape") cancelDocRename();
+                  }}
+                  onBlur={submitDocRename}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                    {doc.title}
+                  </span>
+                  {!branchFilter && doc.branches.length > 0 && (
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "1px 5px",
+                      borderRadius: "3px",
+                      fontSize: "10px",
+                      fontWeight: 500,
+                      backgroundColor: colors.badge,
+                      color: colors.textMuted,
+                      marginLeft: "4px",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {doc.branches.length > 1
+                        ? `${doc.branches.length}`
+                        : doc.branches[0]?.replace("target/", "")}
+                    </span>
+                  )}
+                  <button
+                    className="doc-action"
+                    style={{ background: "none", border: "none", padding: "2px", cursor: "pointer", display: "flex", alignItems: "center", borderRadius: "3px" }}
+                    onClick={(e) => startDocRename(doc.id, e)}
+                    title={t("document.rename")}
+                  >
+                    <Pencil size={11} color={colors.textMuted} />
+                  </button>
+                  <button
+                    className="doc-action"
+                    style={{ background: "none", border: "none", padding: "2px", cursor: "pointer", display: "flex", alignItems: "center", borderRadius: "3px" }}
+                    onClick={(e) => handleDeleteDoc(doc.id, doc.title, e)}
+                    title={t("document.delete")}
+                  >
+                    <Trash2 size={11} color={colors.textMuted} />
+                  </button>
+                </>
               )}
             </div>
           ))}

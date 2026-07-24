@@ -57,11 +57,11 @@ class AgentSession:
             )
         return registry
 
-    def _build_system_prompt(self, document_id: str, branch: Optional[str]) -> str:
-        style_template = self.editor._load_style_template(None)
+    def _build_system_prompt(self, document_id: str, branch: Optional[str], style_template: Optional[str] = None) -> str:
+        style = self.editor._load_style_template(style_template)
         habit_profile = self.editor._load_habit_profile()
         context = self.editor._load_conversation_context(document_id, branch)
-        base = self.editor._build_system_prompt(style_template, habit_profile, context)
+        base = self.editor._build_system_prompt(style, habit_profile, context)
         return base + _AGENT_INSTRUCTIONS
 
     async def run(self, request: EditRequest) -> AsyncGenerator[dict, None]:
@@ -80,7 +80,7 @@ class AgentSession:
             return
 
         registry = self._build_registry(branch)
-        system_prompt = self._build_system_prompt(request.document_id, branch)
+        system_prompt = self._build_system_prompt(request.document_id, branch, request.style_template)
         user_prompt = self.editor._build_user_prompt(
             original_content, request.instruction, request.selection
         )

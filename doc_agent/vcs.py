@@ -202,6 +202,116 @@ class VersionControl:
 
         return commit_hash
 
+    def delete_document(self, doc_id: str, branch: str = None, message: str = None) -> str:
+        """Delete a document and commit the removal.
+
+        Args:
+            doc_id: Document file path relative to repo root.
+            branch: Target branch. Defaults to current branch.
+            message: Commit message. Auto-generated if not provided.
+
+        Returns:
+            The commit hash string.
+
+        Raises:
+            DocumentNotFoundError: If the document does not exist on the branch.
+        """
+        branch = branch or self.get_current_branch()
+        message = message or f"Delete {doc_id}"
+        current_branch = self.get_current_branch()
+        need_switch = branch != current_branch
+
+        stashed = False
+        try:
+            if need_switch:
+                if self.repo.is_dirty(untracked_files=True):
+                    self.repo.git.stash("save", "--include-untracked",
+                                        "doc-agent: auto-stash before branch switch")
+                    stashed = True
+                self.repo.git.checkout(branch)
+
+            file_path = self.workspace_path / doc_id
+            if not file_path.exists():
+                raise DocumentNotFoundError(
+                    f"Document '{doc_id}' not found on branch '{branch}'"
+                )
+            self.repo.git.rm(doc_id)
+            commit = self.repo.index.commit(message)
+            commit_hash = commit.hexsha
+        except GitCommandError as e:
+            raise VCSError(f"Failed to delete document '{doc_id}': {e}") from e
+        finally:
+            if need_switch:
+                try:
+                    self.repo.git.checkout(current_branch)
+                except GitCommandError:
+                    logger.error("Failed to switch back to branch '%s'", current_branch)
+                if stashed:
+                    try:
+                        self.repo.git.stash("pop")
+                    except GitCommandError:
+                        logger.warning("Failed to pop stash, changes remain in stash")
+
+        return commit_hash
+
+    def rename_document(self, old_id: str, new_id: str, branch: str = None, message: str = None) -> str:
+        """Rename/move a document and commit the change.
+
+        Args:
+            old_id: Current document file path relative to repo root.
+            new_id: New document file path relative to repo root.
+            branch: Target branch. Defaults to current branch.
+            message: Commit message. Auto-generated if not provided.
+
+        Returns:
+            The commit hash string.
+
+        Raises:
+            DocumentNotFoundError: If the source document does not exist.
+            VCSError: If the target already exists or the git operation fails.
+        """
+        branch = branch or self.get_current_branch()
+        message = message or f"Rename {old_id} -> {new_id}"
+        current_branch = self.get_current_branch()
+        need_switch = branch != current_branch
+
+        stashed = False
+        try:
+            if need_switch:
+                if self.repo.is_dirty(untracked_files=True):
+                    self.repo.git.stash("save", "--include-untracked",
+                                        "doc-agent: auto-stash before branch switch")
+                    stashed = True
+                self.repo.git.checkout(branch)
+
+            src = self.workspace_path / old_id
+            dst = self.workspace_path / new_id
+            if not src.exists():
+                raise DocumentNotFoundError(
+                    f"Document '{old_id}' not found on branch '{branch}'"
+                )
+            if dst.exists():
+                raise VCSError(f"Target document '{new_id}' already exists")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            self.repo.git.mv(old_id, new_id)
+            commit = self.repo.index.commit(message)
+            commit_hash = commit.hexsha
+        except GitCommandError as e:
+            raise VCSError(f"Failed to rename document '{old_id}': {e}") from e
+        finally:
+            if need_switch:
+                try:
+                    self.repo.git.checkout(current_branch)
+                except GitCommandError:
+                    logger.error("Failed to switch back to branch '%s'", current_branch)
+                if stashed:
+                    try:
+                        self.repo.git.stash("pop")
+                    except GitCommandError:
+                        logger.warning("Failed to pop stash, changes remain in stash")
+
+        return commit_hash
+
     def create_branch(
         self,
         branch_name: str,
