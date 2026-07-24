@@ -327,6 +327,20 @@ async def run_agent(req: EditRequest):
 
 _ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}
 _MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+_ASSET_MIME = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".bmp": "image/bmp",
+}
+
+
+def _asset_mime(ext: str) -> str:
+    """Map a file extension to an image MIME type."""
+    return _ASSET_MIME.get(ext.lower(), "application/octet-stream")
 
 
 @app.post("/api/assets")
@@ -353,7 +367,7 @@ async def get_asset(name: str):
     path = _get_assets_dir() / name
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Asset not found")
-    return FileResponse(path)
+    return FileResponse(path, media_type=_asset_mime(path.suffix))
 
 
 # ─── Export ───────────────────────────────────────────────────────────────────
@@ -364,17 +378,29 @@ def _render_markdown_html(doc_id: str, md_text: str, base_url: str) -> str:
 
     - Fenced ```mermaid blocks are turned into <pre class="mermaid"> and rendered
       client-side via the mermaid CDN.
-    - Relative /api/assets URLs are rewritten to absolute so images load while
-      the server is running.
+    - Uploaded /api/assets images are inlined as base64 data URIs so the export
+      is fully self-contained (displays even without the server running); if an
+      asset file is missing, the URL is rewritten to an absolute one as fallback.
     """
+    import base64
     import markdown
 
     body = markdown.markdown(
         md_text or "",
         extensions=["fenced_code", "tables", "toc", "sane_lists"],
     )
-    # Rewrite relative asset URLs to absolute.
-    body = body.replace('src="/api/assets/', f'src="{base_url.rstrip("/")}/api/assets/')
+
+    # Inline uploaded assets as base64 data URIs (fallback: absolute URL).
+    def _inline_asset(m: "re.Match[str]") -> str:
+        name = m.group(1)
+        path = _get_assets_dir() / name
+        if path.is_file():
+            mime = _asset_mime(path.suffix)
+            b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+            return f'src="data:{mime};base64,{b64}"'
+        return f'src="{base_url.rstrip("/")}/api/assets/{name}"'
+
+    body = re.sub(r'src="/api/assets/([^"/?]+)"', _inline_asset, body)
     # Convert highlighted mermaid code blocks into mermaid containers.
     body = re.sub(
         r'<pre><code class="language-mermaid">(.*?)</code></pre>',
