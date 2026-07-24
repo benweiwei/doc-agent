@@ -63,6 +63,9 @@ export default {
     diagramRenderFailed: '图表渲染失败',
     mermaidLabel: 'Mermaid 源码',
     mermaidEditHint: '点击编辑图表',
+    insertFlowchart: '插入流程图（Mermaid 源码）',
+    fullscreen: '全屏编辑',
+    exitFullscreen: '退出全屏（Esc）',
   },
   history: {
     title: '历史记录',

@@ -63,6 +63,9 @@ export default {
     diagramRenderFailed: 'Failed to render diagram',
     mermaidLabel: 'Mermaid source',
     mermaidEditHint: 'Click to edit diagram',
+    insertFlowchart: 'Insert flowchart (Mermaid source)',
+    fullscreen: 'Fullscreen',
+    exitFullscreen: 'Exit fullscreen (Esc)',
   },
   history: {
     title: 'History',

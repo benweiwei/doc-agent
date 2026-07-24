@@ -1,9 +1,9 @@
 import { useEditor, EditorContent, Editor as TiptapEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
 import { Markdown } from 'tiptap-markdown';
 import { MermaidCodeBlock } from "./MermaidCodeBlock";
+import { ResizableImage } from "./ResizableImage";
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useI18n } from "../context/I18nContext";
 
@@ -358,7 +358,7 @@ function injectTipTapStyles() {
 
 // --- Toolbar Component ---
 
-function Toolbar({ editor, editorMode, onModeChange, onImageUpload, onGenerateDiagram }: { editor: TiptapEditor | null; editorMode: 'visual' | 'source'; onModeChange: (mode: 'visual' | 'source') => void; onImageUpload?: (file: File) => Promise<string>; onGenerateDiagram?: (code: string) => Promise<string> }) {
+function Toolbar({ editor, editorMode, onModeChange, onImageUpload, onGenerateDiagram, fullscreen, onToggleFullscreen }: { editor: TiptapEditor | null; editorMode: 'visual' | 'source'; onModeChange: (mode: 'visual' | 'source') => void; onImageUpload?: (file: File) => Promise<string>; onGenerateDiagram?: (code: string) => Promise<string>; fullscreen?: boolean; onToggleFullscreen?: () => void }) {
   const [, setForceUpdate] = useState(0);
   const [busy, setBusy] = useState<null | 'image' | 'diagram'>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -417,6 +417,15 @@ function Toolbar({ editor, editorMode, onModeChange, onImageUpload, onGenerateDi
       setBusy(null);
     }
   }, [editor, onGenerateDiagram, t]);
+
+  const handleInsertFlowchart = useCallback(() => {
+    if (!editor) return;
+    editor.chain().focus().insertContent({
+      type: 'codeBlock',
+      attrs: { language: 'mermaid' },
+      content: [{ type: 'text', text: 'flowchart TD\n    A[\u5f00\u59cb] --> B[\u7ed3\u675f]' }],
+    }).run();
+  }, [editor]);
 
   if (!editor) return null;
 
@@ -555,6 +564,17 @@ function Toolbar({ editor, editorMode, onModeChange, onImageUpload, onGenerateDi
 
       {(onImageUpload || onGenerateDiagram) && <div style={toolbarStyles.separator} />}
 
+      {/* Insert an empty Mermaid flowchart source block */}
+      <button
+        style={btnStyle(false)}
+        onClick={handleInsertFlowchart}
+        title={t('editor.insertFlowchart')}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#313244"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="2" width="8" height="5" rx="1"/><rect x="3" y="17" width="8" height="5" rx="1"/><rect x="14" y="17" width="7" height="5" rx="1"/><path d="M12 7v5M12 12H7v5M12 12h5.5v5"/></svg>
+      </button>
+
       {/* Image import */}
       {onImageUpload && (
         <>
@@ -599,6 +619,21 @@ function Toolbar({ editor, editorMode, onModeChange, onImageUpload, onGenerateDi
       {/* Spacer to push mode toggle to the right */}
       <div style={{ flex: 1 }} />
 
+      {/* Fullscreen toggle */}
+      {onToggleFullscreen && (
+        <button
+          style={btnStyle(!!fullscreen)}
+          onClick={onToggleFullscreen}
+          title={fullscreen ? t('editor.exitFullscreen') : t('editor.fullscreen')}
+          onMouseEnter={(e) => { if (!fullscreen) (e.currentTarget as HTMLElement).style.backgroundColor = "#313244"; }}
+          onMouseLeave={(e) => { if (!fullscreen) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+        >
+          {fullscreen
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3v3a2 2 0 0 1-2 2H4M20 8h-3a2 2 0 0 1-2-2V3M4 16h3a2 2 0 0 1 2 2v3M15 21v-3a2 2 0 0 1 2-2h3"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg>}
+        </button>
+      )}
+
       {/* Visual / Source mode toggle */}
       <div style={{ display: "flex", alignItems: "center", border: `1px solid ${colors.border}`, borderRadius: "4px", overflow: "hidden" }}>
         <button
@@ -642,6 +677,18 @@ export function Editor({
 
   const gutterRef = useRef<HTMLDivElement>(null);
   const [hoveredGutterY, setHoveredGutterY] = useState<number | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const toggleFullscreen = useCallback(() => setFullscreen((v) => !v), []);
+
+  // Exit fullscreen with the Escape key.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
   const [editorMode, setEditorMode] = useState<'visual' | 'source'>('visual');
   const [sourceContent, setSourceContent] = useState('');
 
@@ -656,11 +703,11 @@ export function Editor({
         placeholder: "Start writing documentation here...",
       }),
       Markdown.configure({
-        html: false,
+        html: true,
         transformCopiedText: true,
         transformPastedText: true,
       }),
-      Image.configure({
+      ResizableImage.configure({
         inline: false,
         allowBase64: true,
       }),
@@ -832,8 +879,11 @@ export function Editor({
   }
 
   return (
-    <div style={editorStyles.wrapper} className="tiptap-editor">
-      {editable && <Toolbar editor={editor} editorMode={editorMode} onModeChange={handleModeChange} onImageUpload={onImageUpload} onGenerateDiagram={onGenerateDiagram} />}
+    <div
+      style={fullscreen ? { ...editorStyles.wrapper, position: "fixed", inset: 0, zIndex: 1000, backgroundColor: colors.bg, padding: "8px 16px" } : editorStyles.wrapper}
+      className="tiptap-editor"
+    >
+      {editable && <Toolbar editor={editor} editorMode={editorMode} onModeChange={handleModeChange} onImageUpload={onImageUpload} onGenerateDiagram={onGenerateDiagram} fullscreen={fullscreen} onToggleFullscreen={toggleFullscreen} />}
       {editorMode === 'visual' ? (
         <div style={editorStyles.editorWithGutter}>
           {/* Gutter for paragraph selection */}
