@@ -1,5 +1,16 @@
 # 更新日志
 
+## v1.2.4 (2026-07-24)
+
+### 新增功能
+
+- 文档删除/改名：左侧文档列表每行新增改名（行内编辑，保留扩展名）与删除（二次确认）；后端新增 `DELETE /api/documents/{id}`（git rm）与 `PUT /api/documents/{id}`（git mv 改名）
+
+### 修复
+
+- 个人风格（习惯画像）未生效：`_load_habit_profile` 未配置时回退到 `~/.doc-agent/habit_profile.json`，使“学习风格”得到的画像在 Agent/单发模式下都自动注入
+- Agent 模式忽略所选文风模板：改为透传请求中的 `style_template`（原硬编码 None）
+
 ## v1.2.3 (2026-07-24)
 
 ### 新增功能
