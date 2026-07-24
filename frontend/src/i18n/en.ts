@@ -44,6 +44,9 @@ export default {
   editor: {
     placeholder: 'Start editing...',
     instruction: 'Enter editing instruction (e.g., make it more formal)',
+    instructionNewDoc: 'Describe your need — AI will create a new document automatically',
+    creatingDoc: 'Creating new document...',
+    createDocFailed: 'Failed to create document, please retry',
     instructionSelection: 'Describe how to edit the selected text...',
     send: 'Send',
     accept: 'Accept',

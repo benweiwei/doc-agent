@@ -15,8 +15,10 @@ interface InstructionBarProps {
   onEditComplete: (response: EditResponse) => void;
   onAccept: () => void;
   onReject: () => void;
-  onInstructionSubmit?: (instruction: string, selection?: string) => void;
+  onInstructionSubmit?: (instruction: string, selection?: string, documentId?: string) => void;
   onEditError?: (errorMessage: string) => void;
+  /** Called when submitting with no document open; should create one and return its id (null on failure). */
+  onEnsureDocument?: (instruction: string) => Promise<string | null>;
 }
 
 // --- Style constants ---
@@ -197,6 +199,7 @@ export function InstructionBar({
   onReject,
   onInstructionSubmit,
   onEditError,
+  onEnsureDocument,
 }: InstructionBarProps) {
   const { t } = useI18n();
   const { state, dispatch } = useAppContext();
@@ -311,25 +314,50 @@ export function InstructionBar({
   }, [lastMessage, onEditComplete, dispatch, t, progressMsg]);
 
   const handleSubmit = useCallback(
-    (e?: React.FormEvent) => {
+    async (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (!instruction.trim() || !documentId || isLoading) return;
+      const text = instruction.trim();
+      if (!text || isLoading) return;
 
       setIsLoading(true);
       setEditDone(false);
       setError("");
+
+      // No document open: auto-create one from the instruction instead of
+      // silently ignoring the submit.
+      let docId = documentId;
+      if (!docId) {
+        if (!onEnsureDocument) {
+          setIsLoading(false);
+          return;
+        }
+        setProgressMsg(t('editor.creatingDoc'));
+        try {
+          docId = (await onEnsureDocument(text)) || "";
+        } catch {
+          docId = "";
+        }
+        if (!docId) {
+          setIsLoading(false);
+          setProgressMsg("");
+          setError(t('editor.createDocFailed'));
+          onEditError?.(t('editor.createDocFailed'));
+          return;
+        }
+      }
+
       setProgressMsg(t('editor.aiThinking'));
       // Start streaming mode
       dispatch({ type: "CLEAR_STREAMING" });
       dispatch({ type: "SET_STREAMING", payload: true });
       dispatch({ type: "CLEAR_AGENT_TIMELINE" });
       onEditStart();
-      onInstructionSubmit?.(instruction.trim(), selectedText || undefined);
+      onInstructionSubmit?.(text, selectedText || undefined, docId);
 
       sendMessage({
         type: agentMode ? "agent" : "edit",
-        document_id: documentId,
-        instruction: instruction.trim(),
+        document_id: docId,
+        instruction: text,
         branch,
         selection: selectedText || undefined,
         style_template: state.selectedStyle || undefined,
@@ -337,7 +365,7 @@ export function InstructionBar({
 
       setInstruction("");
     },
-    [instruction, documentId, branch, selectedText, isLoading, agentMode, sendMessage, onEditStart, dispatch, t]
+    [instruction, documentId, branch, selectedText, isLoading, agentMode, sendMessage, onEditStart, onEnsureDocument, onEditError, onInstructionSubmit, dispatch, t, state.selectedStyle]
   );
 
   const handleKeyDown = useCallback(
@@ -470,9 +498,11 @@ export function InstructionBar({
           onBlur={() => setIsFocused(false)}
           onKeyDown={handleKeyDown}
           placeholder={
-            selectedText
-              ? t('editor.instructionSelection')
-              : t('editor.instruction')
+            !documentId
+              ? t('editor.instructionNewDoc')
+              : selectedText
+                ? t('editor.instructionSelection')
+                : t('editor.instruction')
           }
           disabled={isLoading}
           style={{

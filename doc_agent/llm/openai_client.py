@@ -37,6 +37,7 @@ class OpenAIClient(LLMClient):
         self.api_key_env = api_key_env
         self._api_key = api_key or os.environ.get(api_key_env, "")
         self._base_url = base_url
+        self._drop_temperature = False  # set once the model rejects temperature
         self._client: "AsyncOpenAI | None" = None  # type: ignore[name-defined]
 
     def _get_client(self):
@@ -57,6 +58,38 @@ class OpenAIClient(LLMClient):
     def supports_tools(self) -> bool:
         """OpenAI Chat Completions API supports function calling."""
         return True
+
+    @staticmethod
+    def _is_temperature_rejected(e: Exception) -> bool:
+        """Some models (e.g. Moonshot kimi-k3) only accept temperature=1."""
+        return "invalid temperature" in str(e).lower()
+
+    async def _create_with_retry(self, client, create_kwargs: dict):
+        """Call chat.completions.create, retrying once without temperature.
+
+        Certain models reject any temperature other than their fixed default;
+        on that specific 400 error, drop the parameter and let the server
+        use its own default. Once rejected, the flag is remembered so later
+        calls skip the doomed request entirely.
+        """
+        import openai
+
+        if self._drop_temperature:
+            create_kwargs = {k: v for k, v in create_kwargs.items() if k != "temperature"}
+
+        try:
+            return await client.chat.completions.create(**create_kwargs)
+        except openai.APIStatusError as e:
+            if e.status_code == 400 and self._is_temperature_rejected(e):
+                logger.warning(
+                    "openai.temperature_rejected_retry",
+                    model=self.model,
+                    temperature=create_kwargs.get("temperature"),
+                )
+                self._drop_temperature = True
+                create_kwargs = {k: v for k, v in create_kwargs.items() if k != "temperature"}
+                return await client.chat.completions.create(**create_kwargs)
+            raise
 
     async def chat(
         self,
@@ -103,7 +136,7 @@ class OpenAIClient(LLMClient):
                     for t in tools
                 ]
 
-            response = await client.chat.completions.create(**create_kwargs)
+            response = await self._create_with_retry(client, create_kwargs)
             choice = response.choices[0]
             message = choice.message
 
@@ -207,12 +240,12 @@ class OpenAIClient(LLMClient):
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
 
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
+            response = await self._create_with_retry(client, {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            })
 
             choice = response.choices[0]
             return choice.message.content or ""
@@ -258,13 +291,13 @@ class OpenAIClient(LLMClient):
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
 
-            stream = await client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stream=True,
-            )
+            stream = await self._create_with_retry(client, {
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "stream": True,
+            })
 
             async for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:

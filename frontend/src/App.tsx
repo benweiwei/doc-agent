@@ -348,6 +348,41 @@ function App() {
     [state.currentBranch, dispatch]
   );
 
+  // Auto-create a document when the user submits an instruction with none open.
+  // Returns the new document id, or null on failure.
+  const handleEnsureDocument = useCallback(
+    async (instruction: string): Promise<string | null> => {
+      // Derive a short title from the instruction.
+      let title = instruction.replace(/[\r\n]+/g, " ").trim().slice(0, 20).trim();
+      if (!title) title = "未命名文档";
+      // The backend maps title -> doc_id (`title-with-dashes.md`); avoid
+      // clobbering an existing document with the same derived id.
+      const toDocId = (t: string) => `${t.replace(/[ /]+/g, "-")}.md`;
+      const existingIds = new Set(state.allDocuments.map((d) => d.id));
+      let candidate = title;
+      let n = 2;
+      while (existingIds.has(toDocId(candidate))) {
+        candidate = `${title}-${n}`;
+        n += 1;
+      }
+      try {
+        const newDoc = await api.createDocument(candidate, undefined, state.currentBranch);
+        const docs = await api.listDocuments(state.currentBranch);
+        dispatch({ type: "SET_DOCUMENTS", payload: docs });
+        const allDocs = await api.listAllDocuments();
+        dispatch({ type: "SET_ALL_DOCUMENTS", documents: allDocs.documents });
+        const fullDoc = await api.getDocument(newDoc.id, state.currentBranch);
+        dispatch({ type: "SET_CURRENT_DOCUMENT", payload: fullDoc });
+        dispatch({ type: "OPEN_TAB", payload: { docId: fullDoc.id, title: fullDoc.title } });
+        return newDoc.id;
+      } catch (err) {
+        console.error("Failed to auto-create document:", err);
+        return null;
+      }
+    },
+    [state.currentBranch, state.allDocuments, dispatch]
+  );
+
   const handleRenameDocument = useCallback(
     async (docId: string, newIdRaw: string) => {
       let newId = newIdRaw.trim();
@@ -644,13 +679,13 @@ function App() {
   // --- Instruction submit handler (creates interaction record) ---
 
   const handleInstructionSubmit = useCallback(
-    (instruction: string, selection?: string) => {
+    (instruction: string, selection?: string, documentIdOverride?: string) => {
       const id = generateInteractionId();
       currentInteractionId.current = id;
       const record: InteractionRecord = {
         id,
         timestamp: new Date().toISOString(),
-        documentId: state.currentDocument?.id || "",
+        documentId: documentIdOverride || state.currentDocument?.id || "",
         branch: state.currentBranch,
         instruction,
         selection: selection || undefined,
@@ -1037,6 +1072,7 @@ function App() {
               onReject={handleRejectEdit}
               onInstructionSubmit={handleInstructionSubmit}
               onEditError={handleEditError}
+              onEnsureDocument={handleEnsureDocument}
             />
           </div>
         </section>

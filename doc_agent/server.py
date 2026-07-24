@@ -954,12 +954,21 @@ async def _handle_agent_message(ws: WebSocket, msg: dict) -> None:
     session = AgentSession(config, editor=_get_editor())
     try:
         async for event in session.run(request):
-            await ws.send_json(event)
+            try:
+                await ws.send_json(event)
+            except (WebSocketDisconnect, RuntimeError):
+                # Client went away mid-run; stop the loop quietly instead of
+                # crashing with a noisy ASGI traceback.
+                logger.info("Client disconnected during agent run; aborting")
+                return
     except (VCSError, LLMError) as e:
         await ws.send_json({"type": "error", "message": str(e)})
     except Exception as e:
         logger.exception("Unexpected error in WebSocket agent loop")
-        await ws.send_json({"type": "error", "message": f"Internal error: {e}"})
+        try:
+            await ws.send_json({"type": "error", "message": f"Internal error: {e}"})
+        except (WebSocketDisconnect, RuntimeError):
+            pass
 
 
 async def _ws_dispatch_loop(ws: WebSocket) -> None:

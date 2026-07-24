@@ -16,6 +16,7 @@ from doc_agent.config import AppConfig
 from doc_agent.llm.base import ChatMessage
 from doc_agent.models import EditRequest
 from doc_agent.tools import ToolRegistry, WebSearchTool, build_document_tools
+from doc_agent.vcs import DocumentNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,8 @@ _AGENT_INSTRUCTIONS = (
     "\n\n## Agent 工作方式\n"
     "- 你可以调用工具来完成编辑任务：读取/列出/搜索文档、联网搜索资料。\n"
     "- 需要修改文档时，必须调用 `apply_edit` 写入完整的新内容（改动不会立即提交，用户会确认）。\n"
+    "- 如果目标文档尚不存在或内容为空，说明用户想新建文档：直接根据指令撰写完整内容，"
+    "然后调用 `apply_edit` 写入（首行用 `# 标题` 作为文档标题）。\n"
     "- 编辑完成后，用一句话简要说明你做了什么，然后结束（不再调用工具）。\n"
     "- 保持文档原有格式；只改与指令相关的部分。"
 )
@@ -70,7 +73,11 @@ class AgentSession:
         Event types: step / tool_call / tool_result / token / complete / error.
         """
         branch = request.branch or self.vcs.get_current_branch()
-        original_content, branch = self.vcs.load_document(request.document_id, branch)
+        try:
+            original_content, branch = self.vcs.load_document(request.document_id, branch)
+        except DocumentNotFoundError:
+            # New document: the agent authors the full content via apply_edit.
+            original_content = ""
 
         # Fallback: provider without tool-calling → single-shot edit path.
         if not self.llm.supports_tools():
@@ -84,6 +91,12 @@ class AgentSession:
         user_prompt = self.editor._build_user_prompt(
             original_content, request.instruction, request.selection
         )
+        if not original_content:
+            user_prompt += (
+                f"\n\n注意：这是一篇新文档，目标文档 ID 为 `{request.document_id}`。"
+                f"撰写完整内容后必须调用 apply_edit，且 document_id 必须精确使用 "
+                f"`{request.document_id}`，不要自行改名。"
+            )
         messages: list[ChatMessage] = [ChatMessage(role="user", content=user_prompt)]
 
         max_steps = self.config.agent.max_steps
@@ -149,13 +162,22 @@ class AgentSession:
                 "message": f"reached max_steps ({max_steps}) without completion",
             }
 
+        edited_doc_id = request.document_id
         edited_content = self.working_copy.get(request.document_id, original_content)
+        if request.document_id not in self.working_copy and len(self.working_copy) == 1:
+            # The model wrote to a single different doc id (e.g. it renamed a
+            # new document); adopt that entry so the edit is not lost.
+            edited_doc_id, edited_content = next(iter(self.working_copy.items()))
+            logger.warning(
+                "agent wrote to '%s' instead of requested '%s'; adopting it",
+                edited_doc_id, request.document_id,
+            )
         diff = self.editor._generate_diff(original_content, edited_content)
         yield {
             "type": "complete",
             "stop_reason": stop_reason,
             "edit_response": {
-                "document_id": request.document_id,
+                "document_id": edited_doc_id,
                 "original_content": original_content,
                 "edited_content": edited_content,
                 "diff_summary": diff.unified_diff,

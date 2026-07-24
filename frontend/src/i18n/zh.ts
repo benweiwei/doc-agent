@@ -44,6 +44,9 @@ export default {
   editor: {
     placeholder: '开始编辑文档...',
     instruction: '输入编辑指令（如：改成更正式的语气）',
+    instructionNewDoc: '直接输入需求，AI 将自动新建文档并生成内容',
+    creatingDoc: '正在创建新文档...',
+    createDocFailed: '新建文档失败，请重试',
     instructionSelection: '描述如何编辑选中的文本...',
     send: '发送',
     accept: '接受',
