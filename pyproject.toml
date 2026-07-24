@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doc-agent"
-version = "1.2.0"
+version = "1.2.1"
 description = "AI-powered documentation editing assistant with Cursor-like experience"
 authors = [{name = "Doc-Agent Team"}]
 readme = "README.md"
