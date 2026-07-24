@@ -60,6 +60,9 @@ export default {
     imageUploadFailed: 'Image upload failed',
     diagramNoSelection: 'Select the code to convert into a diagram first',
     diagramFailed: 'Failed to generate diagram',
+    diagramRenderFailed: 'Failed to render diagram',
+    mermaidLabel: 'Mermaid source',
+    mermaidEditHint: 'Click to edit diagram',
   },
   history: {
     title: 'History',

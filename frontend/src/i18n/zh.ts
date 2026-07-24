@@ -60,6 +60,9 @@ export default {
     imageUploadFailed: '图片上传失败',
     diagramNoSelection: '请先选中要转换为架构图的代码',
     diagramFailed: '架构图生成失败',
+    diagramRenderFailed: '图表渲染失败',
+    mermaidLabel: 'Mermaid 源码',
+    mermaidEditHint: '点击编辑图表',
   },
   history: {
     title: '历史记录',

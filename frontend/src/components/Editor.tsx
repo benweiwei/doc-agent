@@ -3,6 +3,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { Markdown } from 'tiptap-markdown';
+import { MermaidCodeBlock } from "./MermaidCodeBlock";
 import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useI18n } from "../context/I18nContext";
 
@@ -316,6 +317,41 @@ function injectTipTapStyles() {
     .tiptap-editor .ProseMirror img.ProseMirror-selectednode {
       outline: 2px solid #89b4fa;
     }
+    .tiptap-editor .mermaid-block {
+      margin: 8px 0;
+    }
+    .tiptap-editor .mermaid-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #6c7086;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .tiptap-editor .mermaid-preview {
+      background: #181825;
+      border: 1px solid #313244;
+      border-radius: 6px;
+      padding: 12px;
+      text-align: center;
+      cursor: pointer;
+      overflow-x: auto;
+    }
+    .tiptap-editor .mermaid-preview svg {
+      max-width: 100%;
+      height: auto;
+    }
+    .tiptap-editor .mermaid-error {
+      background: rgba(243,139,168,0.12);
+      border: 1px solid #f38ba8;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-top: 4px;
+      color: #f38ba8;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -613,7 +649,9 @@ export function Editor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        codeBlock: false,
       }),
+      MermaidCodeBlock,
       Placeholder.configure({
         placeholder: "Start writing documentation here...",
       }),
