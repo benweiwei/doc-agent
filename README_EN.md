@@ -24,19 +24,19 @@ An AI-powered document editing assistant that delivers a Cursor-like intelligent
 
 ## Screenshots
 
-> 📸 Placeholders — screenshots and a demo recording are on the way. Drop files into `docs/images/` (see [`docs/images/README.md`](docs/images/README.md)) and they will show up here automatically.
+| Main editor (type a requirement directly) | Settings: style learning & templates |
+|-------------------------------------------|--------------------------------------|
+| ![Main editor](docs/images/screenshot-main.jpg) | ![Settings](docs/images/screenshot-settings.jpeg) |
 
-| Main editor | AI edit + diff preview |
-|-------------|------------------------|
-| ![Main editor](docs/images/screenshot-main.png) | ![Diff preview](docs/images/screenshot-diff.png) |
+## Demo
 
-| Agent tool-call timeline | Multi-branch view |
-|--------------------------|-------------------|
-| ![Agent timeline](docs/images/screenshot-agent.png) | ![Branches](docs/images/screenshot-branches.png) |
+Requirement → auto-created document → Agent web search + full draft (37s):
 
-| Settings: style learning & templates | Demo: requirement → document |
-|--------------------------------------|------------------------------|
-| ![Settings](docs/images/screenshot-settings.png) | ![Demo](docs/images/demo.gif) |
+https://github.com/user-attachments/assets/PLACEHOLDER-DEMO-VIDEO
+
+> 📼 Inline-player placeholder above: drag `docs/images/demo.mp4` into the README editor on github.com to generate an embeddable URL and replace the placeholder line. You can also [open the video file directly](docs/images/demo.mp4).
+>
+> 📸 More screenshots coming: AI edit diff preview, Agent tool-call timeline, multi-branch view.
 
 ## Quick Start
 

@@ -24,19 +24,19 @@ AI 驱动的文档编辑助手，提供类 Cursor 的智能编辑体验。
 
 ## 界面预览
 
-> 📸 占位待补 —— 截图与演示录屏待添加。把图片放进 `docs/images/`（命名见 [`docs/images/README.md`](docs/images/README.md)）后此处会自动显示。
+| 主界面（无文档直接输入需求） | 设置页：风格学习与模板 |
+|------------------------------|------------------------|
+| ![主界面](docs/images/screenshot-main.jpg) | ![设置页](docs/images/screenshot-settings.jpeg) |
 
-| 主界面 | AI 编辑 + Diff 预览 |
-|--------|---------------------|
-| ![主界面](docs/images/screenshot-main.png) | ![Diff 预览](docs/images/screenshot-diff.png) |
+## 演示录屏
 
-| Agent 工具调用时间线 | 多分支视图 |
-|----------------------|-----------|
-| ![Agent 时间线](docs/images/screenshot-agent.png) | ![多分支](docs/images/screenshot-branches.png) |
+输入需求 → 自动新建文档 → Agent 联网搜索 + 撰写全文（37s）：
 
-| 设置页：风格学习与模板 | 演示：输入需求直接生成文档 |
-|------------------------|----------------------------|
-| ![设置页](docs/images/screenshot-settings.png) | ![演示录屏](docs/images/demo.gif) |
+https://github.com/user-attachments/assets/PLACEHOLDER-DEMO-VIDEO
+
+> 📼 上方为内嵌播放占位：把 `docs/images/demo.mp4` 拖到 GitHub 网页版 README 编辑框即可生成可内嵌播放的链接，替换掉占位行。也可以直接[点击查看视频文件](docs/images/demo.mp4)。
+>
+> 📸 待补截图：AI 编辑 Diff 预览、Agent 工具调用时间线、多分支视图（放入 `docs/images/` 并在上方表格补一行即可）。
 
 ## 快速开始
 
