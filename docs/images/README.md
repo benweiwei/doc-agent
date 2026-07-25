@@ -6,7 +6,8 @@ Current assets referenced by `README.md` / `README_EN.md`:
 |------|---------|
 | `screenshot-main.jpg` | Main editor view — no document open, requirement typed directly into the instruction bar |
 | `screenshot-settings.jpeg` | Settings page — style learning & style templates |
-| `demo.mp4` | 37s demo: requirement → auto-created document → Agent web search + full draft |
+| `demo.gif` | 37s demo embedded in the READMEs (960px / 12fps) |
+| `demo.mp4` | High-quality source of the demo (720p H.264) |
 
 Still welcome (add the file, then add a row to the README preview tables):
 
