@@ -1,30 +1,38 @@
 # doc-agent configuration
+# Copy to ./config.yaml (or ~/.doc-agent/config.yaml) and fill in your values.
+# config.yaml is gitignored — never commit real API keys.
+
 server:
   host: "127.0.0.1"
   port: 3966
-  reload: true
+  auto_open_browser: true
 
 model:
-  # Provider: anthropic, openai, ollama
-  provider: "anthropic"
-  name: "claude-sonnet-4-20250514"
-  temperature: 0.3
-  max_tokens: 4096
+  # cloud: Anthropic / OpenAI-compatible endpoint; local: Ollama
+  provider: "cloud"
+  cloud:
+    service: "openai"                 # "anthropic" | "openai"
+    model: "gpt-4o"                   # e.g. gpt-4o, claude-sonnet-4-20250514, deepseek-chat
+    # Name of the env var holding your API key (recommended over api_key below)
+    api_key_env: "OPENAI_API_KEY"     # use "ANTHROPIC_API_KEY" for anthropic
+    # Direct API key (takes precedence over env var; avoid committing!)
+    api_key: null
+    # Custom base URL for OpenAI-compatible APIs (DeepSeek, Moonshot, etc.)
+    base_url: null                    # e.g. "https://api.deepseek.com/v1"
+  local:
+    service: "ollama"
+    model: "llama3"
+    endpoint: "http://localhost:11434"
+  fallback: false
 
 style:
   # Writing style preferences
-  tone: "professional"
-  language: "zh-CN"
-  # Custom templates directory (optional)
-  templates_dir: null
+  default_template: null
+  habit_profile: null
 
 workspace:
   # Root directory for documentation projects
-  root: "."
-  # Auto-detect git repository
-  auto_detect_git: true
-  # Branch naming pattern for doc branches
-  branch_prefix: "docs/"
+  path: "~/.doc-agent/workspace"
 
 agent:
   # Multi-step agent loop (tool use) settings
@@ -32,7 +40,8 @@ agent:
   token_budget: 0         # cumulative output-token budget; 0 = unlimited
   enable_web_search: true
   search:
-    # Web search backend: duckduckgo (no key) | tavily | brave
+    # Web search backend: duckduckgo (no key) | tavily | brave | bocha
     provider: "duckduckgo"
-    # Env var holding the API key for tavily/brave (leave null for duckduckgo)
+    # Env var holding the API key for tavily/brave/bocha (leave null for duckduckgo)
     api_key_env: null
+    api_key: null
