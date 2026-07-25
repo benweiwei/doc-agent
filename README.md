@@ -32,9 +32,9 @@ AI 驱动的文档编辑助手，提供类 Cursor 的智能编辑体验。
 
 输入需求 → 自动新建文档 → Agent 联网搜索 + 撰写全文（37s）：
 
-https://github.com/user-attachments/assets/PLACEHOLDER-DEMO-VIDEO
+![演示录屏](docs/images/demo.gif)
 
-> 📼 上方为内嵌播放占位：把 `docs/images/demo.mp4` 拖到 GitHub 网页版 README 编辑框即可生成可内嵌播放的链接，替换掉占位行。也可以直接[点击查看视频文件](docs/images/demo.mp4)。
+> 📼 [查看高清 MP4 版本](docs/images/demo.mp4)
 >
 > 📸 待补截图：AI 编辑 Diff 预览、Agent 工具调用时间线、多分支视图（放入 `docs/images/` 并在上方表格补一行即可）。
 

@@ -32,9 +32,9 @@ An AI-powered document editing assistant that delivers a Cursor-like intelligent
 
 Requirement → auto-created document → Agent web search + full draft (37s):
 
-https://github.com/user-attachments/assets/PLACEHOLDER-DEMO-VIDEO
+![Demo](docs/images/demo.gif)
 
-> 📼 Inline-player placeholder above: drag `docs/images/demo.mp4` into the README editor on github.com to generate an embeddable URL and replace the placeholder line. You can also [open the video file directly](docs/images/demo.mp4).
+> 📼 [Watch the high-quality MP4 version](docs/images/demo.mp4)
 >
 > 📸 More screenshots coming: AI edit diff preview, Agent tool-call timeline, multi-branch view.
 
